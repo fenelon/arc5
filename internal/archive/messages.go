@@ -77,10 +77,10 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		res, err := tx.Exec(`
-			INSERT INTO messages (chat_id, source_id, sender_id, kind, sent_at, text,
+			INSERT INTO messages (chat_id, source_id, sender_id, kind, outgoing, sent_at, text,
 			                      reply_to_source_id, forwarded_from, edited_at, edit_dated, captured_at, raw)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			chat, m.SourceID, sender, string(m.Kind), m.SentAt.Unix(), text,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			chat, m.SourceID, sender, string(m.Kind), b2i(m.Outgoing), m.SentAt.Unix(), text,
 			m.ReplyToSourceID, clean(m.ForwardedFrom), nullUnix(incomingEdit), b2i(incomingEdit > 0), now, raw)
 		if err != nil {
 			return nil, err
@@ -278,6 +278,7 @@ type StoredMessage struct {
 	SourceID        string
 	SenderSourceID  string
 	Kind            model.MessageKind
+	Outgoing        bool
 	SentAt          time.Time
 	Text            string
 	ReplyToSourceID string
@@ -292,16 +293,17 @@ func (s *Store) Message(accountID int64, chatSourceID, sourceID string) (StoredM
 		kind            string
 		sent            int64
 		edited, deleted sql.NullInt64
+		outgoing        int
 	)
 	err := s.r.QueryRow(`
 		SELECT m.id, m.source_id, COALESCE(sn.source_id, ''), m.kind, m.sent_at, m.text,
-		       m.reply_to_source_id, m.forwarded_from, m.edited_at, m.deleted_at
+		       m.reply_to_source_id, m.forwarded_from, m.edited_at, m.deleted_at, m.outgoing
 		FROM messages m
 		JOIN chats c ON c.id = m.chat_id
 		LEFT JOIN senders sn ON sn.id = m.sender_id
 		WHERE c.account_id = ? AND c.source_id = ? AND m.source_id = ?`,
 		accountID, chatSourceID, sourceID).
-		Scan(&m.ID, &m.SourceID, &m.SenderSourceID, &kind, &sent, &m.Text, &m.ReplyToSourceID, &m.ForwardedFrom, &edited, &deleted)
+		Scan(&m.ID, &m.SourceID, &m.SenderSourceID, &kind, &sent, &m.Text, &m.ReplyToSourceID, &m.ForwardedFrom, &edited, &deleted, &outgoing)
 	if errors.Is(err, sql.ErrNoRows) {
 		return StoredMessage{}, fmt.Errorf("message %q in chat %q: %w", sourceID, chatSourceID, ErrNotFound)
 	}
@@ -311,6 +313,7 @@ func (s *Store) Message(accountID int64, chatSourceID, sourceID string) (StoredM
 	m.Kind = model.MessageKind(kind)
 	m.SentAt = time.Unix(sent, 0).UTC()
 	m.EditedAt, m.DeletedAt = fromUnix(edited), fromUnix(deleted)
+	m.Outgoing = outgoing != 0
 	return m, nil
 }
 

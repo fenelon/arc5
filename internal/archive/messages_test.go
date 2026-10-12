@@ -448,3 +448,19 @@ func TestEditAfterDeletionKeepsTheMark(t *testing.T) {
 		t.Fatalf("message = %+v; want the new text and the deletion mark", got)
 	}
 }
+
+func TestOutgoingIsStored(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	mine := textMsg("1", "from me")
+	mine.Outgoing = true
+	mustUpsert(t, s, acc, mine)
+	mustUpsert(t, s, acc, textMsg("2", "from them"))
+
+	if !mustMessage(t, s, acc, "1").Outgoing {
+		t.Error("message 1 is not marked outgoing")
+	}
+	if mustMessage(t, s, acc, "2").Outgoing {
+		t.Error("message 2 is marked outgoing")
+	}
+}
