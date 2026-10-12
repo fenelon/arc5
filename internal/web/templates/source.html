@@ -1,0 +1,16 @@
+{{define "source"}}{{template "head" .}}
+<body class="app">
+{{template "topbar" .}}
+{{template "banner" .}}
+<div class="shell{{if .Conversation}} shell--open{{end}}">
+<aside class="list" aria-label="Chats">
+{{range .Chats}}<a class="row{{if .Current}} row--current{{end}}" href="{{.Href}}"{{if .Current}} aria-current="true"{{end}}><span class="avatar" aria-hidden="true">{{.Initials}}</span><span class="row__body"><span class="row__top"><span class="row__name">{{.Title}}</span><span class="row__when">{{.When}}</span></span><span class="row__preview">{{.Preview}}</span></span></a>
+{{else}}<p class="empty">Nothing has been archived here yet.</p>
+{{end}}{{if .MoreChatsHref}}<a class="more" href="{{.MoreChatsHref}}">Show more chats</a>{{end}}
+</aside>
+<section class="conversation" aria-label="Conversation">
+<p class="empty empty--center">Choose a chat on the left to read it.</p>
+</section>
+</div>
+</body>
+</html>{{end}}

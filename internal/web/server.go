@@ -88,6 +88,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /login", s.login)
 	s.mux.Handle("POST /logout", s.signedIn(s.logout))
 	s.mux.Handle("GET /{$}", s.signedIn(s.home))
+	s.mux.Handle("GET /s/{source}", s.signedIn(s.sourceView))
+	s.mux.Handle("GET /sources", s.signedIn(s.sourcesList))
 }
 
 // health is unauthenticated and deliberately says nothing about accounts.

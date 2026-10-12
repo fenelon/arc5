@@ -1,0 +1,16 @@
+{{define "sources"}}{{template "head" .}}
+<body class="app">
+{{template "topbar" .}}
+{{template "banner" .}}
+<main class="plain plain--wide">
+<h1>Sources</h1>
+<p>Each source is one account arc5 keeps a copy of. Its type decides how it is shown: messengers as chats, mailboxes as mail.</p>
+{{range .Groups}}<h2 class="group-heading">{{.Title}}</h2>
+<div class="tiles">
+{{range .Tiles}}<a class="tile tile--wide{{if .Warn}} tile--warn{{end}}" href="{{.Href}}">{{template "logo" .Logo}}<span class="tile__text"><span class="tile__name">{{.Name}}</span><span class="tile__sub">{{.Service}}. {{.Detail}}</span></span>{{template "state" .}}</a>
+{{end}}</div>
+{{else}}<p class="empty">No sources yet.</p>
+{{end}}
+</main>
+</body>
+</html>{{end}}
