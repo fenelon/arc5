@@ -1,0 +1,12 @@
+{{define "login"}}{{template "head" .}}
+<body>
+<main class="plain">
+{{template "brand"}}
+<form class="card" method="post" action="/login">
+{{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+<div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required autofocus></div>
+<button class="button" type="submit">Sign in</button>
+</form>
+</main>
+</body>
+</html>{{end}}

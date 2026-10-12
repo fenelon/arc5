@@ -1,0 +1,33 @@
+{{define "conversation"}}{{with .Conversation}}
+<header class="conv-head">
+<a class="back only-phone" href="{{.BackHref}}" aria-label="Back to chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+<div class="conv-head__text"><h1>{{.Title}}</h1><p>{{.Subtitle}}</p></div>
+{{if .YearOptions}}<form class="jump only-phone" method="get" data-controller="jump"><label class="visually-hidden" for="jump-year">Jump to a year</label><select id="jump-year" name="date" data-action="jump#go">{{range .YearOptions}}<option value="{{.Value}}"{{if .Current}} selected{{end}}>{{.Label}}</option>{{end}}</select><button class="button button--quiet" type="submit" data-jump-target="button">Go</button></form>{{end}}
+</header>
+<div class="conv-body">
+<div class="messages" data-controller="scroll" data-scroll-to-value="{{.ScrollTo}}">
+{{if .OlderHref}}<a class="more" href="{{.OlderHref}}">Earlier messages</a>{{end}}
+{{range .Days}}<h2 class="day"><span>{{.Label}}</span></h2>
+{{range .Messages}}{{template "message" (dict "M" . "CSRF" $.CSRF "Back" $.Conversation.SelfHref)}}
+{{end}}{{else}}<p class="empty empty--center">Nothing has been archived in this chat yet.</p>
+{{end}}{{if .NewerHref}}<a class="more" href="{{.NewerHref}}">Later messages</a>{{end}}
+</div>
+{{if .Years}}<nav class="rail" aria-label="Jump to a quarter">
+{{range .Years}}<div class="rail__year{{if .Now}} rail__year--now{{end}}"><span class="rail__label">{{.Label}}</span>{{range .Bands}}<a class="band{{if .Level}} band--{{.Level}}{{end}}{{if .Now}} band--now{{end}}" href="{{.Href}}" aria-label="{{.Label}}" title="{{.Label}}"></a>{{end}}</div>
+{{end}}</nav>{{end}}
+</div>
+{{end}}{{end}}
+
+{{define "message"}}{{$m := .M}}{{if $m.Service}}<p class="service" id="{{$m.Anchor}}">{{$m.Text}}</p>{{else}}<article class="msg{{if $m.Outgoing}} msg--out{{end}}{{if $m.Target}} msg--target{{end}}" id="{{$m.Anchor}}">
+{{if $m.Sender}}<div class="msg__sender">{{$m.Sender}}</div>{{end}}{{if $m.ForwardedFrom}}<div class="msg__fwd">Forwarded from {{$m.ForwardedFrom}}</div>{{end}}
+{{range $m.Attachments}}{{template "attachment" (dict "A" . "CSRF" $.CSRF "Back" $.Back)}}
+{{end}}{{if $m.Text}}<p class="msg__text">{{$m.Text}}</p>{{end}}
+<div class="msg__meta"><time>{{$m.Time}}</time>{{if $m.Deleted}}<span class="tag tag--warn">Deleted at source on {{$m.Deleted}}</span>{{end}}</div>
+{{if $m.Versions}}<details class="versions"><summary>Edited at {{$m.Edited}}, show earlier</summary>{{range $m.Versions}}<p class="versions__item">{{.Text}} <span class="versions__when">until {{.Until}}</span></p>{{end}}</details>{{else if $m.Edited}}<div class="versions">Edited at {{$m.Edited}}</div>{{end}}
+</article>{{end}}{{end}}
+
+{{define "attachment"}}{{$a := .A}}{{if eq $a.Mode "image"}}<a href="{{$a.URL}}"><img class="media media--image" src="{{$a.URL}}" alt="{{$a.Name}}" loading="lazy"></a>
+{{else if eq $a.Mode "audio"}}<audio class="media" controls preload="none" src="{{$a.URL}}"></audio>
+{{else if eq $a.Mode "video"}}<video class="media" controls preload="none" src="{{$a.URL}}"></video>
+{{else}}<div class="file"><div class="file__text"><div class="file__name">{{$a.Name}}</div><div class="file__detail">{{$a.Detail}}</div></div>{{if eq $a.Mode "file"}}<a class="button button--quiet" href="{{$a.URL}}">Download</a>{{else if eq $a.Mode "skipped"}}<form method="post" action="{{$a.URL}}/fetch"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="back" value="{{.Back}}"><button class="button" type="submit">Fetch now</button></form>{{else if eq $a.Mode "failed"}}<form method="post" action="{{$a.URL}}/fetch"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="back" value="{{.Back}}"><button class="button" type="submit">Try again</button></form>{{end}}</div>
+{{end}}{{if $a.Ephemeral}}<span class="tag">Sent as view-once</span>{{end}}{{end}}

@@ -5,51 +5,81 @@ import (
 	"sync"
 )
 
+// Display says how a connector's sources are shown.
+type Display string
+
+const (
+	DisplayChats Display = "chats" // messengers: conversations beside their messages
+	DisplayMail  Display = "mail"  // mailboxes: folders and threads
+)
+
+// Info describes a kind of connector.
+type Info struct {
+	Name    string // stored on each account, such as "telegram"
+	Title   string // shown to the owner, such as "Telegram"
+	Display Display
+}
+
 // Factory builds a fresh connector for one run.
 type Factory func() Connector
 
-// Registry maps connector names to factories.
+type registered struct {
+	info    Info
+	factory Factory
+}
+
+// Registry holds the connectors built into this binary.
 type Registry struct {
-	mu        sync.RWMutex
-	factories map[string]Factory
+	mu      sync.RWMutex
+	entries map[string]registered
 }
 
 // Default is the registry connector packages add themselves to.
 var Default = NewRegistry()
 
 func NewRegistry() *Registry {
-	return &Registry{factories: map[string]Factory{}}
+	return &Registry{entries: map[string]registered{}}
 }
 
-// Register adds a connector. It panics on an empty or duplicate name, since
-// both are programming errors caught at startup.
-func (r *Registry) Register(name string, f Factory) {
+// Register adds a connector. It panics on incomplete info or a duplicate
+// name, since both are programming errors caught at startup.
+func (r *Registry) Register(info Info, f Factory) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if name == "" {
-		panic("connector: empty name")
+	switch {
+	case info.Name == "" || info.Title == "":
+		panic("connector: Info needs a name and a title")
+	case info.Display != DisplayChats && info.Display != DisplayMail:
+		panic("connector: " + info.Name + " has no display type")
 	}
-	if _, dup := r.factories[name]; dup {
-		panic("connector: " + name + " registered twice")
+	if _, dup := r.entries[info.Name]; dup {
+		panic("connector: " + info.Name + " registered twice")
 	}
-	r.factories[name] = f
+	r.entries[info.Name] = registered{info: info, factory: f}
 }
 
 func (r *Registry) New(name string) (Connector, bool) {
 	r.mu.RLock()
-	f, ok := r.factories[name]
+	e, ok := r.entries[name]
 	r.mu.RUnlock()
 	if !ok {
 		return nil, false
 	}
-	return f(), true
+	return e.factory(), true
+}
+
+func (r *Registry) Info(name string) (Info, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	e, ok := r.entries[name]
+	return e.info, ok
 }
 
 func (r *Registry) Names() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	names := make([]string, 0, len(r.factories))
-	for name := range r.factories {
+	names := make([]string, 0, len(r.entries))
+	for name := range r.entries {
 		names = append(names, name)
 	}
 	sort.Strings(names)

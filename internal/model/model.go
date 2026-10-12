@@ -100,6 +100,7 @@ type Message struct {
 	SourceID        string
 	SenderSourceID  string      // empty when the source names no sender
 	Kind            MessageKind // empty means KindMessage
+	Outgoing        bool        // sent by the account owner
 	SentAt          time.Time
 	Text            string
 	ReplyToSourceID string

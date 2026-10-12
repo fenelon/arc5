@@ -24,7 +24,7 @@ func newTestRunner(t *testing.T, run runFunc) (*Runner, *archive.Store, int64, c
 	store := openStore(t)
 	acc := newAccount(t, store)
 	reg := NewRegistry()
-	reg.Register("stub", func() Connector { return stubConnector{run: run} })
+	reg.Register(stubInfo("stub"), func() Connector { return stubConnector{run: run} })
 	r := NewRunner(store, reg)
 	r.Backoff = func(int) time.Duration { return time.Millisecond }
 	r.Logf = func(string, ...any) {}
@@ -448,7 +448,7 @@ func TestRunnerSurvivesPanickingFactory(t *testing.T) {
 	store := openStore(t)
 	acc := newAccount(t, store)
 	reg := NewRegistry()
-	reg.Register("stub", func() Connector { panic("factory blew up") })
+	reg.Register(stubInfo("stub"), func() Connector { panic("factory blew up") })
 	r := NewRunner(store, reg)
 	r.Backoff = func(int) time.Duration { return time.Hour }
 	r.Logf = func(string, ...any) {}

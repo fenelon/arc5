@@ -5,6 +5,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -235,5 +237,80 @@ func TestServeRefusesAnUnknownLanguageSetting(t *testing.T) {
 	err = run(ctx, []string{"serve", "--listen", "127.0.0.1:0", "--data", dir}, noEnv, nil)
 	if err == nil || !strings.Contains(err.Error(), "klingon") {
 		t.Fatalf("error = %v, want one naming the bad language", err)
+	}
+}
+
+func TestDemoCommandAndTheInterface(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "data")
+	if err := run(context.Background(), []string{"demo", "--data", dir}, noEnv, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(context.Background(), []string{"demo", "--data", dir}, noEnv, nil); err == nil || !strings.Contains(err.Error(), "already") {
+		t.Fatalf("second demo run error = %v; want it to refuse an archive that has sources", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	addr := make(chan string, 1)
+	done := make(chan error, 1)
+	env := func(key string) string {
+		if key == "ARC5_PASSWORD" {
+			return "from-env"
+		}
+		return ""
+	}
+	go func() {
+		done <- run(ctx, []string{"serve", "--listen", "127.0.0.1:0", "--data", dir}, env, func(a string) { addr <- a })
+	}()
+	var base string
+	select {
+	case a := <-addr:
+		base = "http://" + a
+	case err := <-done:
+		t.Fatalf("serve exited early: %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("serve never became ready")
+	}
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+	read := func(resp *http.Response, err error) (int, string) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(body)
+	}
+
+	if code, body := read(client.Get(base + "/")); code != http.StatusOK || !strings.Contains(body, `name="password"`) {
+		t.Fatalf("home before login: %d, want the login page", code)
+	}
+	code, body := read(client.PostForm(base+"/login", url.Values{"password": {"from-env"}}))
+	if code != http.StatusOK || !strings.Contains(body, "Dan Whitfield") || !strings.Contains(body, "Everything at once") {
+		t.Fatalf("after login: %d; want the demo chats and the picker", code)
+	}
+	// The demo connector reports itself live a moment after the server starts.
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(body, `aria-label="Live"`) {
+		if time.Now().After(deadline) {
+			t.Fatal("the demo source never showed as live")
+		}
+		time.Sleep(20 * time.Millisecond)
+		_, body = read(client.Get(base + "/s/chats"))
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("serve returned %v after cancel", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("serve did not stop after cancel")
 	}
 }

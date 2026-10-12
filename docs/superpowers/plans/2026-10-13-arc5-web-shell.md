@@ -5229,3 +5229,37 @@ Stop the server with Ctrl-C. Fix anything that differs before committing; a fix 
 git add internal/connector/demo internal/config cmd/arc5 README.md
 git commit -m "Wire the interface into serve and add a demo archive"
 ```
+
+## Post-review changes
+
+Executed on branch `web-shell`. The code blocks above show the plan as
+written; these are the changes made on top of it.
+
+**From looking at the demo archive beside the mockups (Task 9, Step 8).** One
+commit after Task 9, with tests for the markup:
+
+| Difference from the mockups | Change | Test |
+|---|---|---|
+| The list and the conversation grew with their content, so the whole page scrolled and the rail and top bar scrolled away | `body.app--panes` fills the window; the list, the messages and the rail scroll on their own | (styles) |
+| A conversation opened at the oldest of its 60 messages | `Conversation.ScrollTo` (`end`, `start`, or the target message's anchor) and `scroll_controller.js` | `TestConversationSaysWhereToScroll` |
+| On a phone the top bar sat above an open chat, wrapped "Sign out" to a second row, and the year picker needed "Go" | `body.app--open` hides the top bar on phones; the brand name is hidden on phones; `jump_controller.js` jumps on choice and hides "Go" | `TestConversationPageIsItsOwnScreenOnPhones` |
+
+Home still opens "Everything at once" (`/s/chats`), as `TestHomeOpensTheChats`
+pins, although Step 8's text expected "Personal" in the picker.
+
+**From the whole-branch review.** No critical findings; two important ones,
+each fixed in its own commit:
+
+| Finding | Change | Test |
+|---|---|---|
+| Parallel `POST /login` requests all passed the throttle before the first failure counted (32 of 40 were checked), each running a 19 MiB argon2 check at once | `auth.login` checks one attempt at a time; an attempt that waits more than 3 s is answered 429 | `TestParallelLoginsAreThrottled` |
+| The year rail grouped quarters in UTC with `strftime` on every row, while its links are read in `Deps.Location`, so a message near a quarter's end could be missing from the page its band opens | `ChatQuarters(chatID, loc)` counts each quarter in the reader's zone over a range of the `(chat_id, sent_at)` index; about 100 ms on a 200,000-message chat, from about 290 ms | `TestChatQuartersFollowTheTimeZone`, `TestRailFollowsTheTimeZone` |
+
+Not fixed, and listed for plan 3b: the global login throttle lets anyone keep
+the owner out with a wrong password every few minutes; `localPath` lets a tab
+through; `verifyPassword` trusts the cost numbers in a stored hash; two
+simultaneous first-run setups can both succeed; a media file missing from disk
+gives 500; "Edited at" has no date; lazy images can push the newest message
+out of view; "Fetch now" never completes in the demo; the session test does
+not cover every route; the rail still costs about 100 ms per page on a
+200,000-message chat.

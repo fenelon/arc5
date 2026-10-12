@@ -58,3 +58,27 @@ func TestParseReindex(t *testing.T) {
 		}
 	}
 }
+
+func TestPasswordComesFromTheEnvironmentOnly(t *testing.T) {
+	got, err := Parse(nil, env(map[string]string{"ARC5_PASSWORD": "from-env"}))
+	if err != nil || got.Password != "from-env" {
+		t.Fatalf("Parse = %+v, %v", got, err)
+	}
+	if _, err := Parse([]string{"--password", "x"}, env(nil)); err == nil {
+		t.Error("a --password flag was accepted; flags show in process listings")
+	}
+}
+
+func TestParseDemo(t *testing.T) {
+	got, err := ParseDemo(nil, env(map[string]string{"ARC5_DATA": "/srv/arc5"}))
+	if err != nil || got.DataDir != "/srv/arc5" {
+		t.Fatalf("from environment = %+v, %v", got, err)
+	}
+	got, err = ParseDemo([]string{"--data", "/tmp/x"}, env(nil))
+	if err != nil || got.DataDir != "/tmp/x" {
+		t.Fatalf("flag = %+v, %v", got, err)
+	}
+	if _, err := ParseDemo([]string{"stray"}, env(nil)); err == nil {
+		t.Error("a stray argument was accepted")
+	}
+}

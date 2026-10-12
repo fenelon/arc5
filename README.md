@@ -4,28 +4,37 @@ A self-hosted archive for your message history. It keeps a durable, searchable
 copy of your chats so you can clean out accounts or use auto-delete without
 losing anything.
 
-**Status:** early development. The archive core and search engine run; the web
-interface and the Telegram connector are not built yet, so there is nothing to
-search except in tests. The design is in
-[`docs/superpowers/specs`](docs/superpowers/specs).
+**Status:** early development. The archive, the search engine and a web
+interface for reading chats run. Search in the interface and the Telegram
+connector are not built yet, so the only thing to read is the demo archive.
+The design is in [`docs/superpowers/specs`](docs/superpowers/specs).
 
 ## Run
 
 ```bash
 go build -o arc5 ./cmd/arc5
-./arc5 serve --data ./data
+./arc5 demo --data ./demo-data    # optional: a sample archive to look around
+./arc5 serve --data ./demo-data
 ```
+
+Open <http://127.0.0.1:8080>. On the first visit arc5 asks you to choose a
+password.
 
 | Flag | Environment | Default | Meaning |
 |---|---|---|---|
 | `--listen` | `ARC5_LISTEN` | `127.0.0.1:8080` | Address to listen on |
 | `--data` | `ARC5_DATA` | `data` | Folder for the database and media |
+| | `ARC5_PASSWORD` | none | Login password. When set, it cannot be changed in the browser, and changing it signs every browser out |
 
-`GET /healthz` answers `{"status":"ok"}`.
+`GET /healthz` answers `{"status":"ok"}` without a login.
 
 The data folder holds everything arc5 knows, including connector sessions that
 grant full access to your accounts. It is created with mode `0700`; keep it
 that way.
+
+arc5 listens on this computer only. To reach it from elsewhere, put it behind
+a reverse proxy that adds TLS, or a VPN. Behind a proxy that sends
+`X-Forwarded-Proto: https`, the login cookie is marked `Secure`.
 
 ## Search languages
 

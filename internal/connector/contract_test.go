@@ -49,7 +49,7 @@ func runScript(t *testing.T, store *archive.Store, steps []connectortest.Step) {
 	t.Helper()
 	fake := connectortest.New(steps...)
 	reg := connector.NewRegistry()
-	reg.Register("fake", func() connector.Connector { return fake })
+	reg.Register(connector.Info{Name: "fake", Title: "Fake", Display: connector.DisplayChats}, func() connector.Connector { return fake })
 	runner := connector.NewRunner(store, reg)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() { cancel(); runner.Wait() }()

@@ -1,0 +1,15 @@
+{{define "setup"}}{{template "head" .}}
+<body>
+<main class="plain">
+{{template "brand"}}
+<form class="card" method="post" action="/setup">
+<h1>Choose a password</h1>
+<p>It protects everything arc5 archives. Use at least 8 characters.</p>
+{{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+<div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="new-password" required autofocus></div>
+<div class="field"><label for="password_again">The same password again</label><input id="password_again" name="password_again" type="password" autocomplete="new-password" required></div>
+<button class="button" type="submit">Save password and sign in</button>
+</form>
+</main>
+</body>
+</html>{{end}}

@@ -8,8 +8,9 @@ import (
 )
 
 type Config struct {
-	Listen  string
-	DataDir string
+	Listen   string
+	DataDir  string
+	Password string // from ARC5_PASSWORD only; empty lets the owner choose one in the browser
 }
 
 // Parse reads `serve` arguments. Flags win over environment variables, which
@@ -22,6 +23,7 @@ func Parse(args []string, getenv func(string) string) (Config, error) {
 	if v := getenv("ARC5_DATA"); v != "" {
 		cfg.DataDir = v
 	}
+	cfg.Password = getenv("ARC5_PASSWORD")
 
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -58,6 +60,29 @@ func ParseReindex(args []string, getenv func(string) string) (Reindex, error) {
 	}
 	if fs.NArg() > 0 {
 		return Reindex{}, fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+	return cfg, nil
+}
+
+// Demo holds the arguments of `arc5 demo`.
+type Demo struct {
+	DataDir string
+}
+
+// ParseDemo reads `demo` arguments.
+func ParseDemo(args []string, getenv func(string) string) (Demo, error) {
+	cfg := Demo{DataDir: "data"}
+	if v := getenv("ARC5_DATA"); v != "" {
+		cfg.DataDir = v
+	}
+	fs := flag.NewFlagSet("demo", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringVar(&cfg.DataDir, "data", cfg.DataDir, "data folder (ARC5_DATA)")
+	if err := fs.Parse(args); err != nil {
+		return Demo{}, err
+	}
+	if fs.NArg() > 0 {
+		return Demo{}, fmt.Errorf("unexpected argument %q", fs.Arg(0))
 	}
 	return cfg, nil
 }
