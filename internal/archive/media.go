@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/fenelon/arc5/internal/model"
 )
@@ -94,11 +95,33 @@ func (s *Store) PutMedia(accountID int64, ref model.AttachmentRef, r io.Reader) 
 		if err := os.Rename(tmp.Name(), final); err != nil {
 			return err
 		}
+		if err := syncDir(filepath.Dir(final)); err != nil {
+			return err
+		}
 	} else if err != nil {
 		return err
 	}
 
 	_, err = s.w.Exec(`UPDATE attachments SET sha256 = ?, size = ?, status = 'stored', reason = '', requested = 0 WHERE id = ?`, sum, size, id)
+	return err
+}
+
+// syncDir flushes a directory after a rename into it, so the new file's name
+// survives a power cut along with its contents. Filesystems that cannot sync
+// a directory (some network mounts) report EINVAL or ENOTSUP; that is not an
+// error the caller can act on.
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	err = d.Sync()
+	if closeErr := d.Close(); err == nil {
+		err = closeErr
+	}
+	if errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.ENOTSUP) {
+		return nil
+	}
 	return err
 }
 

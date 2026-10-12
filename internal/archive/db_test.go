@@ -133,6 +133,7 @@ func checkPragmas(t *testing.T, s *Store) {
 		{"writer", s.w, "journal_mode", "wal"},
 		{"writer", s.w, "busy_timeout", "5000"},
 		{"writer", s.w, "foreign_keys", "1"},
+		{"writer", s.w, "synchronous", "2"}, // FULL: a commit survives power loss
 		{"reader", s.r, "busy_timeout", "5000"},
 		{"reader", s.r, "foreign_keys", "1"},
 		{"reader", s.r, "query_only", "1"},

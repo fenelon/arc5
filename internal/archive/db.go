@@ -48,7 +48,10 @@ func Open(dataDir string) (*Store, error) {
 		return nil, fmt.Errorf("restrict database: %w", err)
 	}
 
-	writeDSN, err := dsn(path, "busy_timeout(5000)", "foreign_keys(1)", "journal_mode(WAL)", "synchronous(NORMAL)")
+	// synchronous=FULL syncs the log on every commit, so a message that was
+	// acknowledged survives a power cut. NORMAL would be faster but can lose
+	// the last commits, which an archive of auto-deleting messages cannot afford.
+	writeDSN, err := dsn(path, "busy_timeout(5000)", "foreign_keys(1)", "journal_mode(WAL)", "synchronous(FULL)")
 	if err != nil {
 		return nil, err
 	}
