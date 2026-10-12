@@ -2,7 +2,11 @@ module github.com/fenelon/arc5
 
 go 1.26.2
 
-require modernc.org/sqlite v1.60.1
+require (
+	github.com/blevesearch/snowballstem v0.9.0
+	golang.org/x/text v0.43.0
+	modernc.org/sqlite v1.60.1
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
