@@ -35,7 +35,11 @@ func TestOpenCreatesSchema(t *testing.T) {
 		}
 		got = append(got, name)
 	}
-	want := []string{"accounts", "attachments", "chats", "connector_state", "message_versions", "messages", "schema_migrations", "senders", "settings"}
+	want := []string{
+		"accounts", "attachments", "chats", "connector_state", "message_versions", "messages",
+		"messages_fts", "messages_fts_config", "messages_fts_data", "messages_fts_docsize", "messages_fts_idx",
+		"schema_migrations", "senders", "settings",
+	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("tables = %v, want %v", got, want)
 	}
@@ -84,8 +88,8 @@ func TestReopenKeepsDataAndAppliesMigrationsOnce(t *testing.T) {
 	if err := s.r.QueryRow(`SELECT COUNT(*) FROM settings WHERE key = 'probe'`).Scan(&probes); err != nil {
 		t.Fatal(err)
 	}
-	if migrations != 1 || probes != 1 {
-		t.Fatalf("migrations = %d, probes = %d, want 1 and 1", migrations, probes)
+	if migrations != 2 || probes != 1 {
+		t.Fatalf("migrations = %d, probes = %d, want 2 and 1", migrations, probes)
 	}
 }
 

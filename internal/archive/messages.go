@@ -62,6 +62,10 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 		return nil, err
 	}
 
+	// changed is set when the message's searchable content (text or
+	// attachment names) is new, so the index row must be rewritten.
+	changed := false
+
 	var (
 		id          int64
 		storedText  string
@@ -84,6 +88,7 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 		if id, err = res.LastInsertId(); err != nil {
 			return nil, err
 		}
+		changed = true
 	case err != nil:
 		return nil, err
 	default:
@@ -110,6 +115,7 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 					text, editedAt, b2i(incomingEdit > 0), raw, id); err != nil {
 					return nil, err
 				}
+				changed = true
 			}
 		} else if incomingEdit > sourceEdit {
 			if _, err := tx.Exec(`UPDATE messages SET edited_at = ?, edit_dated = 1 WHERE id = ?`, incomingEdit, id); err != nil {
@@ -130,11 +136,23 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 		case a.Size > limit:
 			status, reason = model.StatusSkipped, reasonOverCap
 		}
-		if _, err := tx.Exec(`
+		res, err := tx.Exec(`
 			INSERT INTO attachments (message_id, position, kind, file_name, mime_type, size, status, reason, ephemeral)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT (message_id, position) DO NOTHING`,
-			id, position, string(a.Kind), clean(a.FileName), clean(a.MimeType), a.Size, string(status), clean(reason), b2i(a.Ephemeral)); err != nil {
+			id, position, string(a.Kind), clean(a.FileName), clean(a.MimeType), a.Size, string(status), clean(reason), b2i(a.Ephemeral))
+		if err != nil {
+			return nil, err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return nil, err
+		} else if n > 0 {
+			changed = true
+		}
+	}
+
+	if analyzer := s.currentAnalyzer(); analyzer != nil && changed {
+		if err := indexMessage(tx, analyzer, id); err != nil {
 			return nil, err
 		}
 	}

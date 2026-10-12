@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -24,10 +25,11 @@ const dbFile = "arc5.db"
 
 // Store owns the database and the media folder under one data directory.
 type Store struct {
-	w       *sql.DB // single connection; every write goes through it
-	r       *sql.DB // read-only pool
-	dataDir string
-	now     func() time.Time
+	w        *sql.DB // single connection; every write goes through it
+	r        *sql.DB // read-only pool
+	dataDir  string
+	now      func() time.Time
+	analyzer atomic.Pointer[Analyzer] // nil until SetAnalyzer; see index.go
 }
 
 // Open creates the data folder and database if needed and applies migrations.
