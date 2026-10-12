@@ -10,7 +10,7 @@ session.
 | 1. Archive core, connector model, runner | Done, merged. Plan: `plans/2026-10-12-arc5-core.md` |
 | 2. Search engine (analyzer, FTS index, names) | Done, merged. Plan: `plans/2026-10-12-arc5-search.md` |
 | 3a. Web shell and chats view | Done, merged. Plan: `plans/2026-10-13-arc5-web-shell.md` |
-| 3b. Search in the interface, Sources page with setup flows, Settings | Not planned yet |
+| 3b. Search in the interface, Sources page with setup flows, Settings | **Planned, awaiting the owner's review.** Plan: `plans/2026-10-13-arc5-search-sources-settings.md`; its "Decisions for the owner to confirm" list the open calls |
 | 4. Telegram connector | Not planned yet; two decisions open (below) |
 | 5. Alerts, `backup`, Docker image, view-once option | Not planned yet |
 | Later | Email connector with the mail layout, then WhatsApp |
