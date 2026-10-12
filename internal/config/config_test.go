@@ -1,0 +1,40 @@
+package config
+
+import "testing"
+
+func env(pairs map[string]string) func(string) string {
+	return func(key string) string { return pairs[key] }
+}
+
+func TestParse(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		env  map[string]string
+		want Config
+	}{
+		{"defaults", nil, nil, Config{Listen: "127.0.0.1:8080", DataDir: "data"}},
+		{"environment", nil, map[string]string{"ARC5_LISTEN": "0.0.0.0:9000", "ARC5_DATA": "/srv/arc5"}, Config{Listen: "0.0.0.0:9000", DataDir: "/srv/arc5"}},
+		{"flags win over environment", []string{"--listen", ":7000", "--data", "/tmp/x"}, map[string]string{"ARC5_LISTEN": "0.0.0.0:9000", "ARC5_DATA": "/srv/arc5"}, Config{Listen: ":7000", DataDir: "/tmp/x"}},
+		{"one flag, one from environment", []string{"--data", "/tmp/x"}, map[string]string{"ARC5_LISTEN": ":9000"}, Config{Listen: ":9000", DataDir: "/tmp/x"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Parse(tt.args, env(tt.env))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Fatalf("Parse = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseRejectsBadArguments(t *testing.T) {
+	for _, args := range [][]string{{"--nope"}, {"stray"}, {"--listen"}} {
+		if _, err := Parse(args, env(nil)); err == nil {
+			t.Errorf("Parse(%v) succeeded", args)
+		}
+	}
+}
