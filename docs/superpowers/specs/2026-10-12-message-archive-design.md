@@ -97,7 +97,11 @@ internal/config/
   stemmers.
 - Unicode normalization: `golang.org/x/text/unicode/norm`.
 - Password hashing: argon2id from `golang.org/x/crypto`.
-- Stimulus: the single-file ES module build, vendored into `internal/web/static`.
+- Stimulus 3.2.2: the single-file ES module build, vendored into
+  `internal/web/static`.
+- Typeface: Geologica (variable, SIL Open Font License), vendored as four
+  subset files (Latin, Latin Extended, Cyrillic, Cyrillic Extended). Nothing is
+  loaded from another site at run time.
 
 ## 3. Connector interface
 
@@ -148,7 +152,18 @@ type Step struct {
 }
 ```
 
-Connectors are registered by name at build time. An account is one configured
+Connectors are registered at build time with a small description:
+
+```go
+type Info struct {
+    Name    string  // "telegram"; stored on each account
+    Title   string  // "Telegram"; shown on the source's tile
+    Display Display // DisplayChats or DisplayMail
+}
+```
+
+`Display` decides how a source is shown: messenger connectors as chats, mail
+connectors as mail. The interface never asks the owner to choose a layout. An account is one configured
 instance of a connector. The runner starts every enabled account's connector,
 restarts it with exponential backoff (capped at five minutes) when `Run`
 returns an error, and keeps the latest `Progress` per account for the web
@@ -185,8 +200,8 @@ senders(id, account_id, source_id, display_name, username,
         UNIQUE(account_id, source_id))
 
 messages(id, chat_id, source_id, sender_id, kind, sent_at, text,
-         reply_to_source_id, forwarded_from, edited_at, edit_dated,
-         deleted_at, captured_at, raw BLOB,
+         outgoing, reply_to_source_id, forwarded_from, edited_at,
+         edit_dated, deleted_at, captured_at, raw BLOB,
          UNIQUE(chat_id, source_id))
          kind: message | service
 
@@ -220,6 +235,9 @@ Rules the archive enforces:
 - **Raw payload.** `raw` holds the source's original message object as
   compressed JSON, so fields not modelled in v1 (reactions, polls, formatting
   entities) can be derived later without re-fetching.
+- **Outgoing.** `outgoing` is 1 for messages the account owner sent. Only the
+  connector knows this; the interface uses it to set the owner's messages
+  apart.
 - **Service messages** (joins, calls, pinned-message notices) are stored with
   `kind = service` and a short rendered description in `text`. They appear in
   the chat view and are excluded from search by default.
@@ -426,22 +444,82 @@ With auto-delete on, an unnoticed outage is permanent loss.
 
 ## 8. Web interface
 
-Server-rendered Go templates. JavaScript is Stimulus controllers only, loaded
-as ES modules from files embedded in the binary. Controllers fetch HTML
-fragments from the server and swap them in.
+Server-rendered Go templates with CSS classes only (no inline styles or
+scripts, so a strict content-security policy holds). JavaScript is Stimulus
+controllers loaded as ES modules from files embedded in the binary; they fetch
+HTML fragments from the server and swap them in. The approved mockup is at
+https://claude.ai/artifact/ErJ5ojBuFs8pTM2CLAUsyj.
+
+### Look
+
+One typeface, Geologica. Two themes:
+
+| | Light | Dark |
+|---|---|---|
+| Ground / pane | `#EEF3F5` / `#FFFFFF` | `#17181A` / `#1E2022` |
+| Raised surface | `#FFFFFF` | `#26282B` |
+| Lines | `#CFDBDF` | `#34373B` |
+| Text / muted | `#0D2530` / `#4C6470` | `#ECEDEE` / `#A4A8AD` |
+| Accent | teal `#0B6E7F` | orange `#FF8A1F` |
+| Owner's messages | `#D7ECEF` | `#3A2A17` |
+| Search hit | `#F4D38A` | `#5A4A00` on `#FFE98A` text |
+| Needs attention | `#7A4700` on `#FBEBCB` | `#FFA79B` on `#472320` |
+| Live | `#1E9E6A` | `#5FD08C` |
+
+The theme follows the device unless the owner picks light or dark, with the
+button in the top bar or in Settings. The choice is kept in a cookie so the
+server renders the right theme with no flash.
+
+### Sources and layouts
+
+A **source** is one account. Its tile shows the service logo in a tinted
+square, the name the owner gave it as the title, the service name under it, and
+a state mark: a green dot for live, a padlock for needs login, circling arrows
+for catching up.
+
+The **source picker** sits in the top bar. Closed, it is the current source's
+tile. Open, it lists every source as tiles in a three-column grid, grouped
+under "Messengers" and "Mail". The first tile of each group is "Everything at
+once", which shows all sources of that kind in one list. The footer has one
+link, "Manage sources".
+
+The layout follows the selected source's display type:
+
+- **Chats** (messenger connectors): conversations on the left, newest first,
+  each with its last message and date; the open conversation on the right; the
+  search box above. The owner's messages sit on the right in the theme's
+  "owner" colour. A **year rail** runs down the right edge of a conversation:
+  one block per year, four bands per year showing how much was said in each
+  quarter, the current position marked in the accent colour; each band jumps to
+  that quarter. On a phone the list and the conversation are separate screens
+  and the rail becomes a year picker.
+- **Mail** (mail connectors): folders on the left (Inbox, Sent, All mail) under
+  the mailbox's name and address; conversations as rows with sender name and
+  address, message count, subject, snippet, attachment mark and date. A thread
+  shows each message as its own card with initials, name, address, recipients,
+  date and position ("4 of 5"); earlier messages are folded to one line, and
+  the owner's are tinted. The mail layout is built with the email connector.
+
+Searching replaces the left column with results: matching chats and people
+first, then message hits with highlighted snippets and matched file names.
+Choosing a chat opens it; choosing a person shows their messages; choosing a
+hit opens the conversation at that message. Search covers whatever the picker
+has selected.
+
+### Pages
 
 | Page | Contents |
 |---|---|
-| Search (home) | Query box with search-as-you-type, filters, results |
-| Chats | Archived chats with source, kind, last message time, message count |
-| Chat view | Messages in order, keyset-paged in both directions, jump to date, markers for edited (with earlier versions on demand), deleted and ephemeral; inline images, audio and video using the browser's players; "fetch now" on skipped attachments |
-| Sources | Add an account via its setup flow; status and backfill progress (polled); per-chat archive toggles; connector settings |
-| Settings | Password, search languages, media size cap, alert webhook and threshold |
-| Login | Password form |
+| Source view | The chats or mail layout above |
+| Sources | Every source as a tile with a line of detail; the selected source's settings in one panel below (name, which chats are archived, history catch-up with age and speed, self-destructing media, sign out, remove); "Add a source" and "Log in again" run the connector's setup flow in that panel |
+| Settings | Appearance, search languages, attachment size limit, outage alert, password |
+| Login, first run | A password field |
 
-Stimulus controllers: search (debounced query, filter state), setup-flow
-(step submission), progress (polling), chat (paging, jump to date),
-attachment (fetch now, retry).
+A banner appears on every page while any enabled source is not connected or
+ingestion is paused.
+
+Stimulus controllers: theme, picker, search (debounced query, results
+fragment), setup-flow, progress (polling), attachment (fetch now, retry).
 
 ### Security
 
@@ -457,10 +535,11 @@ attachment (fetch now, retry).
 - **Login throttling.** Five failed attempts start an increasing delay.
 - **CSRF.** Every state-changing request carries a per-session token.
 - **Untrusted content.** All message text and names are escaped by the
-  templates. Media is served only to a logged-in session, with `nosniff` and a
-  sandboxing content-security policy. Only an allowlist of image, audio and
-  video types is served inline; everything else, including HTML and SVG, is
-  served as a download.
+  templates. Pages are served with a content-security policy that allows
+  scripts, styles, fonts and images only from arc5 itself. Media is served
+  only to a logged-in session, with `nosniff` and a sandboxing policy. Only an
+  allowlist of image, audio and video types is served inline; everything else,
+  including HTML and SVG, is served as a download.
 - **Network.** Listens on `127.0.0.1:8080` by default. Documentation directs
   the owner to a TLS reverse proxy or a VPN for remote access.
 - **Outbound.** Only to configured sources and the alert webhook.
@@ -517,7 +596,13 @@ working, tested program:
 
 1. Archive, connector interface, runner, fake connector, `serve` skeleton.
 2. Search: analysis, index, query, snippets, `reindex`.
-3. Web interface: login, search, chats, chat view, settings.
+3. Web interface, in two plans:
+   a. Shell and chats: login, themes, source picker, the chats layout with the
+      year rail, media, and a demo archive to look at.
+   b. Search in the interface, the Sources page with setup flows, Settings.
 4. Telegram connector: login and setup flow, backfill, live capture, media.
 5. Alerts, `backup`, Docker image, self-destructing media option and its
    manual test.
+
+The email connector and the mail layout follow as their own spec, then
+WhatsApp.
