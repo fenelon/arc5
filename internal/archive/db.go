@@ -6,6 +6,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -47,14 +48,21 @@ func Open(dataDir string) (*Store, error) {
 		return nil, fmt.Errorf("restrict database: %w", err)
 	}
 
-	const common = "?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
-	w, err := sql.Open("sqlite", path+common+"&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)")
+	writeDSN, err := dsn(path, "busy_timeout(5000)", "foreign_keys(1)", "journal_mode(WAL)", "synchronous(NORMAL)")
+	if err != nil {
+		return nil, err
+	}
+	readDSN, err := dsn(path, "busy_timeout(5000)", "foreign_keys(1)", "query_only(1)")
+	if err != nil {
+		return nil, err
+	}
+	w, err := sql.Open("sqlite", writeDSN)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 	// One writer avoids SQLITE_BUSY between connectors; database/sql queues callers.
 	w.SetMaxOpenConns(1)
-	r, err := sql.Open("sqlite", path+common+"&_pragma=query_only(1)")
+	r, err := sql.Open("sqlite", readDSN)
 	if err != nil {
 		w.Close()
 		return nil, fmt.Errorf("open database for reading: %w", err)
@@ -66,6 +74,22 @@ func Open(dataDir string) (*Store, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+// dsn builds a SQLite file: URI. Appending "?params" to a plain path would be
+// cut at a "?" in the path itself and open a different file, so the path is
+// escaped instead.
+func dsn(path string, pragmas ...string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve database path: %w", err)
+	}
+	params := make([]string, len(pragmas))
+	for i, p := range pragmas {
+		params[i] = "_pragma=" + p
+	}
+	u := url.URL{Scheme: "file", Path: filepath.ToSlash(abs), RawQuery: strings.Join(params, "&")}
+	return u.String(), nil
 }
 
 func (s *Store) Close() error {

@@ -115,7 +115,9 @@ func (s *Store) SetAttachmentStatus(accountID int64, ref model.AttachmentRef, st
 	if err != nil {
 		return err
 	}
-	_, err = s.w.Exec(`UPDATE attachments SET status = ?, reason = ?, requested = 0 WHERE id = ?`, string(status), clean(reason), id)
+	// A stored attachment stays stored: a duplicate download that fails later
+	// must not hide the copy that was saved.
+	_, err = s.w.Exec(`UPDATE attachments SET status = ?, reason = ?, requested = 0 WHERE id = ? AND status != 'stored'`, string(status), clean(reason), id)
 	return err
 }
 

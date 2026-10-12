@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,6 +27,7 @@ func newTestRunner(t *testing.T, run runFunc) (*Runner, *archive.Store, int64, c
 	reg.Register("stub", func() Connector { return stubConnector{run: run} })
 	r := NewRunner(store, reg)
 	r.Backoff = func(int) time.Duration { return time.Millisecond }
+	r.Logf = func(string, ...any) {}
 	ctx, cancel := context.WithCancel(context.Background())
 	// Registered after openStore's cleanup, so it runs first: stop connectors, then close the store.
 	t.Cleanup(func() { cancel(); r.Wait() })
@@ -335,6 +338,156 @@ func TestDefaultBackoff(t *testing.T) {
 	} {
 		if got := DefaultBackoff(attempt); got != want {
 			t.Errorf("DefaultBackoff(%d) = %v, want %v", attempt, got, want)
+		}
+	}
+}
+
+// Overlapping restarts (two requests toggling the same account) must never
+// leave more than one connector running for it.
+func TestConcurrentRestartsLeaveOneConnector(t *testing.T) {
+	var live, peak atomic.Int32
+	r, _, acc, ctx := newTestRunner(t, func(ctx context.Context, _ Sink, _ State, _ map[string]string) error {
+		n := live.Add(1)
+		for {
+			p := peak.Load()
+			if n <= p || peak.CompareAndSwap(p, n) {
+				break
+			}
+		}
+		defer live.Add(-1)
+		return blockUntilCancelled(ctx)
+	})
+	if err := r.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "running state", func() bool { return statusOf(r, acc).State == StateRunning })
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := r.Restart(acc); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	eventually(t, "the restarted connector", func() bool { return statusOf(r, acc).State == StateRunning })
+	time.Sleep(20 * time.Millisecond)
+	if live.Load() != 1 || peak.Load() != 1 || len(r.Status()) != 1 {
+		t.Fatalf("live = %d, peak = %d, tracked = %d; want 1, 1, 1", live.Load(), peak.Load(), len(r.Status()))
+	}
+}
+
+func TestRestartDuringShutdownStartsNothing(t *testing.T) {
+	var calls atomic.Int32
+	r, _, acc, _ := newTestRunner(t, func(ctx context.Context, _ Sink, _ State, _ map[string]string) error {
+		calls.Add(1)
+		return blockUntilCancelled(ctx)
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := r.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the first run", func() bool { return calls.Load() == 1 })
+	cancel()
+	r.Wait()
+	if err := r.Restart(acc); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("a connector was started after shutdown: %d runs", n)
+	}
+}
+
+func TestBackoffEscalatesAndResetsAfterAHealthyRun(t *testing.T) {
+	var (
+		mu       sync.Mutex
+		now      = time.Unix(1_700_000_000, 0)
+		attempts []int
+		calls    atomic.Int32
+	)
+	r, _, _, ctx := newTestRunner(t, func(ctx context.Context, _ Sink, _ State, _ map[string]string) error {
+		switch n := calls.Add(1); {
+		case n == 4: // this run lasts two minutes before it drops
+			mu.Lock()
+			now = now.Add(2 * time.Minute)
+			mu.Unlock()
+			return errors.New("dropped after a long run")
+		case n <= 5:
+			return errors.New("boom")
+		}
+		return blockUntilCancelled(ctx)
+	})
+	r.now = func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		return now
+	}
+	r.Backoff = func(attempt int) time.Duration {
+		mu.Lock()
+		attempts = append(attempts, attempt)
+		mu.Unlock()
+		return time.Millisecond
+	}
+	if err := r.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the sixth run", func() bool { return calls.Load() == 6 })
+	mu.Lock()
+	got := slices.Clone(attempts)
+	mu.Unlock()
+	if want := []int{1, 2, 3, 1, 2}; !slices.Equal(got, want) {
+		t.Fatalf("backoff attempts = %v, want %v", got, want)
+	}
+}
+
+func TestRunnerSurvivesPanickingFactory(t *testing.T) {
+	store := openStore(t)
+	acc := newAccount(t, store)
+	reg := NewRegistry()
+	reg.Register("stub", func() Connector { panic("factory blew up") })
+	r := NewRunner(store, reg)
+	r.Backoff = func(int) time.Duration { return time.Hour }
+	r.Logf = func(string, ...any) {}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() { cancel(); r.Wait() })
+	if err := r.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "backoff state", func() bool { return statusOf(r, acc).State == StateBackoff })
+	if msg := statusOf(r, acc).LastError; !strings.Contains(msg, "factory blew up") {
+		t.Fatalf("last error = %q", msg)
+	}
+}
+
+// A crash-looping connector must leave a trace an operator can read.
+func TestRunnerLogsFailuresWithPanicStack(t *testing.T) {
+	var (
+		mu    sync.Mutex
+		lines []string
+	)
+	r, _, acc, ctx := newTestRunner(t, func(context.Context, Sink, State, map[string]string) error {
+		panic("nil map write")
+	})
+	r.Backoff = func(int) time.Duration { return time.Hour }
+	r.Logf = func(format string, args ...any) {
+		mu.Lock()
+		lines = append(lines, fmt.Sprintf(format, args...))
+		mu.Unlock()
+	}
+	if err := r.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "backoff state", func() bool { return statusOf(r, acc).State == StateBackoff })
+	mu.Lock()
+	logged := strings.Join(lines, "\n")
+	mu.Unlock()
+	for _, want := range []string{`"Test"`, "stub", "nil map write", "goroutine ", "backoff"} {
+		if !strings.Contains(logged, want) {
+			t.Errorf("log lacks %q:\n%s", want, logged)
 		}
 	}
 }

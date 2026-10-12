@@ -238,3 +238,20 @@ func TestRequestMediaRoundTrip(t *testing.T) {
 		t.Fatalf("requesting missing attachment error = %v, want ErrNotFound", err)
 	}
 }
+
+// A late failure report for a duplicate download must not hide media that was saved.
+func TestStoredAttachmentCannotBeDowngraded(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	ref := withAttachment(t, s, acc, "1", 5)
+	if err := s.PutMedia(acc, ref, strings.NewReader("hello")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAttachmentStatus(acc, ref, model.StatusUnavailable, "gone at source"); err != nil {
+		t.Fatalf("reporting a stored attachment as unavailable: %v", err)
+	}
+	got := attachment(t, s, acc, "1")
+	if got.Status != model.StatusStored || got.SHA256 == "" || got.Reason != "" {
+		t.Fatalf("attachment = %+v; want it still stored", got)
+	}
+}

@@ -18,9 +18,9 @@ const reasonOverCap = "over size cap"
 // UpsertMessage stores a new message or applies an edit, and returns the
 // attachments of that message still waiting to be downloaded.
 //
-// It is idempotent. An upsert whose edit time is older than the stored one is
-// ignored, so replaying an original never reverts a later edit. Attachments
-// are recorded when their position is first seen and are not changed by edits.
+// It is idempotent, and replaying an older copy never reverts a later edit:
+// see staleText. Attachments are recorded when their position is first seen
+// and are not changed by edits.
 func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.AttachmentRef, error) {
 	if m.SourceID == "" {
 		return nil, fmt.Errorf("%w: message needs a source ID", ErrInvalid)
@@ -63,20 +63,21 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 	}
 
 	var (
-		id         int64
-		storedText string
-		storedEdit sql.NullInt64
+		id          int64
+		storedText  string
+		storedEdit  sql.NullInt64
+		storedDated int
 	)
-	err = tx.QueryRow(`SELECT id, text, edited_at FROM messages WHERE chat_id = ? AND source_id = ?`, chat, m.SourceID).
-		Scan(&id, &storedText, &storedEdit)
+	err = tx.QueryRow(`SELECT id, text, edited_at, edit_dated FROM messages WHERE chat_id = ? AND source_id = ?`, chat, m.SourceID).
+		Scan(&id, &storedText, &storedEdit, &storedDated)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		res, err := tx.Exec(`
 			INSERT INTO messages (chat_id, source_id, sender_id, kind, sent_at, text,
-			                      reply_to_source_id, forwarded_from, edited_at, captured_at, raw)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			                      reply_to_source_id, forwarded_from, edited_at, edit_dated, captured_at, raw)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			chat, m.SourceID, sender, string(m.Kind), m.SentAt.Unix(), text,
-			m.ReplyToSourceID, clean(m.ForwardedFrom), nullUnix(incomingEdit), now, raw)
+			m.ReplyToSourceID, clean(m.ForwardedFrom), nullUnix(incomingEdit), b2i(incomingEdit > 0), now, raw)
 		if err != nil {
 			return nil, err
 		}
@@ -85,20 +86,35 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 		}
 	case err != nil:
 		return nil, err
-	case incomingEdit >= storedEdit.Int64 && text != storedText:
-		if _, err := tx.Exec(`INSERT INTO message_versions (message_id, text, replaced_at) VALUES (?, ?, ?)`, id, storedText, now); err != nil {
-			return nil, err
+	default:
+		// Only an edit time the source gave us can be compared with another;
+		// our own capture time says nothing about the source's order of events.
+		var sourceEdit int64
+		if storedDated != 0 {
+			sourceEdit = storedEdit.Int64
 		}
-		editedAt := incomingEdit
-		if editedAt == 0 {
-			editedAt = now
-		}
-		if _, err := tx.Exec(`UPDATE messages SET text = ?, edited_at = ?, raw = COALESCE(?, raw) WHERE id = ?`, text, editedAt, raw, id); err != nil {
-			return nil, err
-		}
-	case incomingEdit > storedEdit.Int64:
-		if _, err := tx.Exec(`UPDATE messages SET edited_at = ? WHERE id = ?`, incomingEdit, id); err != nil {
-			return nil, err
+		if text != storedText {
+			stale, err := staleText(tx, id, text, incomingEdit, sourceEdit)
+			if err != nil {
+				return nil, err
+			}
+			if !stale {
+				if _, err := tx.Exec(`INSERT INTO message_versions (message_id, text, replaced_at) VALUES (?, ?, ?)`, id, storedText, now); err != nil {
+					return nil, err
+				}
+				editedAt := incomingEdit
+				if editedAt == 0 {
+					editedAt = now
+				}
+				if _, err := tx.Exec(`UPDATE messages SET text = ?, edited_at = ?, edit_dated = ?, raw = COALESCE(?, raw) WHERE id = ?`,
+					text, editedAt, b2i(incomingEdit > 0), raw, id); err != nil {
+					return nil, err
+				}
+			}
+		} else if incomingEdit > sourceEdit {
+			if _, err := tx.Exec(`UPDATE messages SET edited_at = ?, edit_dated = 1 WHERE id = ?`, incomingEdit, id); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -143,6 +159,26 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 		return nil, err
 	}
 	return pending, tx.Commit()
+}
+
+// staleText reports whether incoming text that differs from the stored text is
+// an older copy being replayed rather than a new edit.
+//
+//   - Dated incoming text is stale if the source dated the stored text later.
+//   - Undated incoming text is stale if the source dates its edits (an undated
+//     copy is then the original), or if this exact text was already replaced.
+//     A source that never dates edits can therefore edit repeatedly, at the
+//     cost that changing a message back to an earlier wording is not recorded.
+func staleText(tx *sql.Tx, messageID int64, text string, incomingEdit, sourceEdit int64) (bool, error) {
+	if incomingEdit > 0 {
+		return incomingEdit < sourceEdit, nil
+	}
+	if sourceEdit > 0 {
+		return true, nil
+	}
+	var replaced int
+	err := tx.QueryRow(`SELECT COUNT(*) FROM message_versions WHERE message_id = ? AND text = ?`, messageID, text).Scan(&replaced)
+	return replaced > 0, err
 }
 
 // senderID returns the sender's row ID, creating a nameless sender if the

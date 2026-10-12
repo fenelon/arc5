@@ -183,8 +183,8 @@ senders(id, account_id, source_id, display_name, username,
         UNIQUE(account_id, source_id))
 
 messages(id, chat_id, source_id, sender_id, kind, sent_at, text,
-         reply_to_source_id, forwarded_from, edited_at, deleted_at,
-         captured_at, raw BLOB,
+         reply_to_source_id, forwarded_from, edited_at, edit_dated,
+         deleted_at, captured_at, raw BLOB,
          UNIQUE(chat_id, source_id))
          kind: message | service
 
@@ -208,8 +208,11 @@ Rules the archive enforces:
   may overlap, and a connector may replay after a crash.
 - **Edits keep history.** If an upsert carries different text from the stored
   message, the old text is written to `message_versions` and `edited_at` is set.
-  An upsert whose edit time is older than the stored one is ignored, so a
-  replayed original never reverts a later edit.
+  A replayed older copy never reverts a later edit: dated text is ignored if
+  the source dated the stored text later, and undated text is ignored if the
+  source dates its edits or if that exact text was already replaced.
+  `edit_dated` records whether `edited_at` came from the source or is our
+  capture time; only source times are compared.
 - **Deletions are marks.** `MarkDeleted` sets `deleted_at`. No row or file is
   removed because the source removed it.
 - **Raw payload.** `raw` holds the source's original message object as

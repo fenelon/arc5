@@ -1,6 +1,7 @@
 package archive
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"slices"
@@ -118,5 +119,69 @@ func TestFTS5Available(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("FTS5 match count = %d, want 1", n)
+	}
+}
+
+func checkPragmas(t *testing.T, s *Store) {
+	t.Helper()
+	for _, c := range []struct {
+		name   string
+		db     *sql.DB
+		pragma string
+		want   string
+	}{
+		{"writer", s.w, "journal_mode", "wal"},
+		{"writer", s.w, "busy_timeout", "5000"},
+		{"writer", s.w, "foreign_keys", "1"},
+		{"reader", s.r, "busy_timeout", "5000"},
+		{"reader", s.r, "foreign_keys", "1"},
+		{"reader", s.r, "query_only", "1"},
+	} {
+		var got string
+		if err := c.db.QueryRow("PRAGMA " + c.pragma).Scan(&got); err != nil {
+			t.Fatalf("%s %s: %v", c.name, c.pragma, err)
+		}
+		if got != c.want {
+			t.Errorf("%s %s = %q, want %q", c.name, c.pragma, got, c.want)
+		}
+	}
+}
+
+func TestConnectionPragmasAreApplied(t *testing.T) {
+	checkPragmas(t, openTemp(t))
+}
+
+// A folder name with URL metacharacters must not send the database elsewhere.
+func TestOpenHandlesAwkwardFolderNames(t *testing.T) {
+	const name = "we?ird #50% dir"
+	parent := t.TempDir()
+	dir := filepath.Join(parent, name)
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if _, err := s.w.Exec(`INSERT INTO settings (key, value) VALUES ('probe', '1')`); err != nil {
+		t.Fatal(err)
+	}
+	checkPragmas(t, s)
+
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	if !slices.Equal(names, []string{name}) {
+		t.Fatalf("parent folder holds %q; the database escaped the data folder", names)
+	}
+	info, err := os.Stat(filepath.Join(dir, "arc5.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Size() == 0 || info.Mode().Perm() != 0o600 {
+		t.Fatalf("arc5.db size = %d, mode = %o; want a non-empty 0600 file", info.Size(), info.Mode().Perm())
 	}
 }

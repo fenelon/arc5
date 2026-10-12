@@ -375,3 +375,76 @@ func TestMessageNotFound(t *testing.T) {
 		t.Fatalf("error = %v, want ErrNotFound", err)
 	}
 }
+
+// A source that does not date its edits can still edit a message more than once.
+func TestUndatedEditsKeepApplying(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	for _, text := range []string{"a", "b", "c"} {
+		mustUpsert(t, s, acc, textMsg("1", text))
+	}
+	got := mustMessage(t, s, acc, "1")
+	if got.Text != "c" {
+		t.Fatalf("text = %q, want c", got.Text)
+	}
+	versions, err := s.Versions(got.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != 2 || versions[0].Text != "a" || versions[1].Text != "b" {
+		t.Fatalf("versions = %+v, want a then b", versions)
+	}
+}
+
+func TestUndatedReplayOfReplacedTextIsIgnored(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	for _, text := range []string{"a", "b", "a"} {
+		mustUpsert(t, s, acc, textMsg("1", text))
+	}
+	got := mustMessage(t, s, acc, "1")
+	if got.Text != "b" {
+		t.Fatalf("text = %q, want b", got.Text)
+	}
+	if v, _ := s.Versions(got.ID); len(v) != 1 {
+		t.Fatalf("versions = %d, want 1", len(v))
+	}
+}
+
+// The capture clock stamps an undated edit; it must not outrank the source's own clock.
+func TestDatedEditAppliesAfterUndatedEdit(t *testing.T) {
+	s := openTemp(t)
+	s.now = func() time.Time { return t0.Add(time.Hour) }
+	acc := seedChat(t, s)
+	mustUpsert(t, s, acc, textMsg("1", "a"))
+	mustUpsert(t, s, acc, textMsg("1", "b"))
+	dated := textMsg("1", "c")
+	dated.EditedAt = t0.Add(time.Minute) // earlier than the capture clock
+	mustUpsert(t, s, acc, dated)
+
+	got := mustMessage(t, s, acc, "1")
+	if got.Text != "c" || !got.EditedAt.Equal(t0.Add(time.Minute)) {
+		t.Fatalf("message = %+v", got)
+	}
+}
+
+// Review Focus 2, second half: an edit that arrives after the deletion keeps the mark.
+func TestEditAfterDeletionKeepsTheMark(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	mustUpsert(t, s, acc, textMsg("1", "hello"))
+	if err := s.MarkDeleted(acc, "c1", []string{"1", "never-captured"}); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := s.MessageCount(acc, "c1"); n != 1 {
+		t.Fatalf("deleting an unknown message changed the count to %d", n)
+	}
+	edit := textMsg("1", "hello, world")
+	edit.EditedAt = t0.Add(time.Minute)
+	mustUpsert(t, s, acc, edit)
+
+	got := mustMessage(t, s, acc, "1")
+	if got.Text != "hello, world" || got.DeletedAt.IsZero() {
+		t.Fatalf("message = %+v; want the new text and the deletion mark", got)
+	}
+}

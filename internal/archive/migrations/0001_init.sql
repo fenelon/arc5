@@ -38,6 +38,7 @@ CREATE TABLE messages (
   reply_to_source_id TEXT    NOT NULL DEFAULT '',
   forwarded_from     TEXT    NOT NULL DEFAULT '',
   edited_at          INTEGER,
+  edit_dated         INTEGER NOT NULL DEFAULT 0, -- 1 when edited_at came from the source, 0 when it is our capture time
   deleted_at         INTEGER,
   captured_at        INTEGER NOT NULL,
   raw                BLOB,

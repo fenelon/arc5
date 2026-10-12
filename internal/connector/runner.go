@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"runtime/debug"
 	"sort"
 	"sync"
 	"time"
@@ -60,7 +62,13 @@ type Runner struct {
 	reg   *Registry
 	// Backoff returns how long to wait before retry number attempt (from 1).
 	Backoff func(attempt int) time.Duration
-	now     func() time.Time
+	// Logf records failed runs. Defaults to log.Printf.
+	Logf func(format string, args ...any)
+	now  func() time.Time
+
+	// restartMu serialises Restart, and Wait's snapshot, so an account never
+	// has two connectors and nothing starts once shutdown has been observed.
+	restartMu sync.Mutex
 
 	mu       sync.Mutex
 	ctx      context.Context
@@ -79,6 +87,7 @@ func NewRunner(store *archive.Store, reg *Registry) *Runner {
 		store:    store,
 		reg:      reg,
 		Backoff:  DefaultBackoff,
+		Logf:     log.Printf,
 		now:      time.Now,
 		ctx:      context.Background(),
 		accounts: map[int64]*supervised{},
@@ -120,13 +129,20 @@ func (r *Runner) launch(acc archive.Account) {
 // again if it is enabled. Call it after changing an account's settings or a
 // chat's archive toggle; checkpoints make the restart lossless.
 func (r *Runner) Restart(accountID int64) error {
+	r.restartMu.Lock()
+	defer r.restartMu.Unlock()
+
 	r.mu.Lock()
 	s := r.accounts[accountID]
 	delete(r.accounts, accountID)
+	stopping := r.ctx.Err() != nil
 	r.mu.Unlock()
 	if s != nil {
 		s.cancel()
 		<-s.done
+	}
+	if stopping {
+		return nil
 	}
 	acc, err := r.store.Account(accountID)
 	if err != nil {
@@ -140,12 +156,14 @@ func (r *Runner) Restart(accountID int64) error {
 
 // Wait blocks until every supervised connector has stopped.
 func (r *Runner) Wait() {
+	r.restartMu.Lock() // let a restart in flight finish launching, so it is counted
 	r.mu.Lock()
 	all := make([]*supervised, 0, len(r.accounts))
 	for _, s := range r.accounts {
 		all = append(all, s)
 	}
 	r.mu.Unlock()
+	r.restartMu.Unlock()
 	for _, s := range all {
 		<-s.done
 	}
@@ -205,9 +223,11 @@ func (r *Runner) supervise(ctx context.Context, acc archive.Account, s *supervis
 			r.setState(s, StateStopped, "")
 			return
 		case errors.Is(err, errUnknownConnector):
+			r.Logf("account %d %q stopped: %v", acc.ID, acc.Label, err)
 			r.setState(s, StateStopped, err.Error())
 			return
 		case errors.Is(err, ErrNeedsLogin):
+			r.Logf("connector %s (account %d %q) needs login: %v", acc.Connector, acc.ID, acc.Label, err)
 			r.setState(s, StateNeedsLogin, err.Error())
 			return
 		}
@@ -221,8 +241,11 @@ func (r *Runner) supervise(ctx context.Context, acc archive.Account, s *supervis
 		}
 		attempt++
 		r.setState(s, next, err.Error())
+		delay := r.Backoff(attempt)
+		r.Logf("connector %s (account %d %q) failed, now %s; retry %d in %s: %v",
+			acc.Connector, acc.ID, acc.Label, next, attempt, delay, err)
 
-		timer := time.NewTimer(r.Backoff(attempt))
+		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -236,6 +259,14 @@ func (r *Runner) supervise(ctx context.Context, acc archive.Account, s *supervis
 // runOnce runs the connector until it returns. It always returns a non-nil
 // error unless ctx was cancelled, and turns a panic into an error.
 func (r *Runner) runOnce(ctx context.Context, acc archive.Account, s *supervised) (err error) {
+	// Registered first, so a panic in the connector's factory is caught too.
+	defer func() {
+		if p := recover(); p != nil {
+			r.Logf("connector %s (account %d %q) panicked: %v\n%s", acc.Connector, acc.ID, acc.Label, p, debug.Stack())
+			err = fmt.Errorf("connector panicked: %v", p)
+		}
+	}()
+
 	c, ok := r.reg.New(acc.Connector)
 	if !ok {
 		return fmt.Errorf("%w: %q", errUnknownConnector, acc.Connector)
@@ -261,11 +292,6 @@ func (r *Runner) runOnce(ctx context.Context, acc archive.Account, s *supervised
 		st.State, st.Since, st.LastError, st.Progress = StateRunning, now, "", Progress{}
 	})
 
-	defer func() {
-		if p := recover(); p != nil {
-			err = fmt.Errorf("connector panicked: %v", p)
-		}
-	}()
 	err = c.Run(ctx, sink, accountState{store: r.store, accountID: acc.ID}, acc.Settings)
 	if err == nil {
 		err = errors.New("connector stopped without an error")
