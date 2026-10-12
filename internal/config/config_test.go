@@ -38,3 +38,23 @@ func TestParseRejectsBadArguments(t *testing.T) {
 		}
 	}
 }
+
+func TestParseReindex(t *testing.T) {
+	got, err := ParseReindex(nil, env(nil))
+	if err != nil || got != (Reindex{DataDir: "data"}) {
+		t.Fatalf("defaults = %+v, %v", got, err)
+	}
+	got, err = ParseReindex([]string{"--languages", "en,ru"}, env(map[string]string{"ARC5_DATA": "/srv/arc5"}))
+	if err != nil || got != (Reindex{DataDir: "/srv/arc5", Languages: "en,ru"}) {
+		t.Fatalf("from environment = %+v, %v", got, err)
+	}
+	got, err = ParseReindex([]string{"--data", "/tmp/x"}, env(map[string]string{"ARC5_DATA": "/srv/arc5"}))
+	if err != nil || got.DataDir != "/tmp/x" {
+		t.Fatalf("flag over environment = %+v, %v", got, err)
+	}
+	for _, args := range [][]string{{"--listen", ":1"}, {"stray"}, {"--languages"}} {
+		if _, err := ParseReindex(args, env(nil)); err == nil {
+			t.Errorf("ParseReindex(%v) succeeded", args)
+		}
+	}
+}
