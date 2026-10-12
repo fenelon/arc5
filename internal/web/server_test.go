@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -285,5 +286,42 @@ func TestPagesCarryThemeAndHeaders(t *testing.T) {
 	s.cookies["arc5_theme"] = &http.Cookie{Name: "arc5_theme", Value: `"><script>`}
 	if body := s.get("/").Body.String(); strings.Contains(body, "data-theme=") || strings.Contains(body, "<script>") {
 		t.Error("an invalid theme cookie reached the page")
+	}
+}
+
+// Wrong passwords sent all at once are checked one at a time, so the throttle
+// holds and the server never runs many password checks side by side.
+func TestParallelLoginsAreThrottled(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	const tries = 40
+	codes := make(chan int, tries)
+	var wg sync.WaitGroup
+	for range tries {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("password=wrong+horse"))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rec := httptest.NewRecorder()
+			s.srv.ServeHTTP(rec, req)
+			codes <- rec.Code
+		}()
+	}
+	wg.Wait()
+	close(codes)
+	checked, refused := 0, 0
+	for code := range codes {
+		switch code {
+		case http.StatusUnauthorized:
+			checked++
+		case http.StatusTooManyRequests:
+			refused++
+		default:
+			t.Errorf("unexpected status %d", code)
+		}
+	}
+	if checked > 5 || checked+refused != tries {
+		t.Fatalf("%d wrong passwords were checked and %d refused; want at most 5 checked", checked, refused)
 	}
 }

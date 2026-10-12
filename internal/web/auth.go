@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -37,11 +38,15 @@ const (
 
 	throttleAfter = 5
 	throttleMax   = 5 * time.Minute
+	// loginQueueWait is how long a sign-in waits for the one before it to be
+	// checked before it is turned away.
+	loginQueueWait = 3 * time.Second
 )
 
 var (
 	errShortPassword = fmt.Errorf("the password needs at least %d characters", minPasswordLen)
 	errEnvPassword   = errors.New("the password is set by ARC5_PASSWORD and cannot be changed here")
+	errLoginBusy     = errors.New("another sign-in is being checked")
 )
 
 func hashPassword(password string) (string, error) {
@@ -80,6 +85,42 @@ type auth struct {
 	mu          sync.Mutex
 	failures    int
 	lockedUntil time.Time
+
+	// checking holds one token while a sign-in is checked. Checks run one at a
+	// time, so the throttle sees every failure before the next attempt, and
+	// a burst of requests never runs many 19 MiB password checks at once.
+	checking     chan struct{}
+	checkingOnce sync.Once
+}
+
+// login checks a sign-in attempt under the throttle. It returns how long to
+// wait when attempts are locked out, and errLoginBusy when another attempt
+// was still being checked after loginQueueWait.
+func (a *auth) login(ctx context.Context, password string) (ok bool, wait time.Duration, err error) {
+	a.checkingOnce.Do(func() { a.checking = make(chan struct{}, 1) })
+	timer := time.NewTimer(loginQueueWait)
+	defer timer.Stop()
+	select {
+	case a.checking <- struct{}{}:
+		defer func() { <-a.checking }()
+	case <-timer.C:
+		return false, 0, errLoginBusy
+	case <-ctx.Done():
+		return false, 0, ctx.Err()
+	}
+	if wait := a.wait(); wait > 0 {
+		return false, wait, nil
+	}
+	ok, err = a.check(password)
+	if err != nil {
+		return false, 0, err
+	}
+	if ok {
+		a.succeeded()
+	} else {
+		a.failed()
+	}
+	return ok, 0, nil
 }
 
 func (a *auth) usesEnv() bool { return a.envPassword != "" }

@@ -96,23 +96,24 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		redirect(w, r, "/setup")
 		return
 	}
-	if wait := s.auth.wait(); wait > 0 {
+	ok, wait, err := s.auth.login(r.Context(), r.PostFormValue("password"))
+	switch {
+	case errors.Is(err, errLoginBusy):
+		s.render(w, http.StatusTooManyRequests, "login", s.formPage(r, "Sign in",
+			"Another sign-in is being checked. Try again in a moment."))
+		return
+	case err != nil:
+		s.fail(w, err)
+		return
+	case wait > 0:
 		seconds := int(math.Ceil(wait.Seconds()))
 		s.render(w, http.StatusTooManyRequests, "login", s.formPage(r, "Sign in",
 			fmt.Sprintf("Too many wrong passwords. Try again in %d seconds.", seconds)))
 		return
-	}
-	ok, err := s.auth.check(r.PostFormValue("password"))
-	if err != nil {
-		s.fail(w, err)
-		return
-	}
-	if !ok {
-		s.auth.failed()
+	case !ok:
 		s.render(w, http.StatusUnauthorized, "login", s.formPage(r, "Sign in", "That password is not right."))
 		return
 	}
-	s.auth.succeeded()
 	if err := s.auth.startSession(w, r); err != nil {
 		s.fail(w, err)
 		return
