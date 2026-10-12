@@ -37,9 +37,6 @@ type sourcePage struct {
 	Conversation  *Conversation
 }
 
-// Conversation is the open chat. Task 7 fills it in.
-type Conversation struct{}
-
 // initials are up to two letters that stand for a name in its avatar.
 func initials(name string) string {
 	var out []rune

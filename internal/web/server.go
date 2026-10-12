@@ -89,6 +89,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /logout", s.signedIn(s.logout))
 	s.mux.Handle("GET /{$}", s.signedIn(s.home))
 	s.mux.Handle("GET /s/{source}", s.signedIn(s.sourceView))
+	s.mux.Handle("GET /s/{source}/c/{chat}", s.signedIn(s.conversationView))
 	s.mux.Handle("GET /sources", s.signedIn(s.sourcesList))
 }
 

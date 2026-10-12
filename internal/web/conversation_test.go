@@ -1,0 +1,242 @@
+package web
+
+import (
+	"fmt"
+	"net/http"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/fenelon/arc5/internal/model"
+)
+
+// talk opens a site with one source and one chat, "Dan Whitfield", holding n
+// messages a minute apart ending at noon, and returns the chat's page address.
+func talk(t *testing.T, n int) (*site, int64, string, []int64) {
+	t.Helper()
+	s := newSite(t, "")
+	s.signIn()
+	s.srv.deps.Now = func() time.Time { return noon.Add(time.Hour) }
+	acc := s.account("Personal", "telegram")
+	ids := make([]int64, n)
+	for i := range n {
+		at := noon.Add(-time.Duration(n-1-i) * time.Minute)
+		ids[i] = s.say(acc, "Dan Whitfield", fmt.Sprint(i+1), fmt.Sprintf("message number %d", i+1), at)
+	}
+	if n == 0 {
+		return s, acc, "", nil
+	}
+	return s, acc, fmt.Sprintf("/s/%d/c/%d", acc, s.chatID(acc, "Dan Whitfield")), ids
+}
+
+func TestConversationShowsTheNewestMessages(t *testing.T) {
+	s, acc, path, ids := talk(t, 70)
+	body := s.page(path)
+	has(t, body, "<h1>Dan Whitfield</h1>", "Private chat on Telegram, 70 messages since September 2026",
+		"message number 70", "message number 11", `<h2 class="day"><span>Monday, 28 September 2026</span></h2>`,
+		fmt.Sprintf(`href="%s?before=%d"`, path, ids[10]), "Earlier messages",
+		`class="row row--current"`, `<div class="shell shell--open">`, fmt.Sprintf(`href="/s/%d"`, acc))
+	lacks(t, body, "message number 10<", "Later messages", "Choose a chat on the left")
+}
+
+func TestConversationPaging(t *testing.T) {
+	s, _, path, ids := talk(t, 70)
+
+	older := s.page(fmt.Sprintf("%s?before=%d", path, ids[10]))
+	has(t, older, "message number 10", "message number 1<", fmt.Sprintf(`href="%s?after=%d"`, path, ids[9]), "Later messages")
+	lacks(t, older, "Earlier messages", "message number 11<")
+
+	around := s.page(fmt.Sprintf("%s?at=%d", path, ids[34]))
+	has(t, around, "message number 35", fmt.Sprintf(`id="m%d"`, ids[34]), "msg--target", "Earlier messages", "Later messages")
+	if strings.Count(around, "msg--target") != 1 {
+		t.Error("more than one message is marked as the target")
+	}
+
+	byDate := s.page(path + "?date=2026-09-28")
+	has(t, byDate, "message number 1<")
+}
+
+// Review Focus 4: paging edges.
+func TestConversationEdges(t *testing.T) {
+	s, acc, path, _ := talk(t, 1)
+	other := s.say(acc, "Someone else", "1", "in another chat", noon)
+
+	for name, query := range map[string]string{
+		"another chat's message": fmt.Sprintf("?at=%d", other),
+		"a missing message":      "?before=987654",
+		"a later missing one":    "?after=987654",
+		"nonsense":               "?at=banana&before=-3",
+		"a bad date":             "?date=yesterday",
+		"a date far ahead":       "?date=2999-01-01",
+	} {
+		body := s.page(path + query)
+		if !strings.Contains(body, "message number 1") || strings.Count(body, `class="msg__text"`) != 1 {
+			t.Errorf("%s: want the chat's one message and nothing else", name)
+		}
+	}
+
+	empty := s.account("Second", "telegram")
+	if err := s.store.UpsertChat(empty, model.Chat{SourceID: "quiet", Kind: model.ChatPrivate, Title: "Quiet"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"/s/chats/c/999999", "/s/chats/c/banana", fmt.Sprintf("/s/%d/c/%d", empty, s.chatID(acc, "Dan Whitfield"))} {
+		if rec := s.get(bad); rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s: status %d, want 404", bad, rec.Code)
+		}
+	}
+}
+
+// Review Focus 1: hostile content appears as text.
+func TestHostileContentIsShownAsText(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	acc := s.account(`<b>Personal</b>`, "telegram")
+	const attack = `<script>alert(1)</script><img src=x onerror=alert(2)>"'`
+	if err := s.store.UpsertChat(acc, model.Chat{SourceID: "c", Kind: model.ChatGroup, Title: attack}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.UpsertSender(acc, model.Sender{SourceID: "evil", DisplayName: attack}); err != nil {
+		t.Fatal(err)
+	}
+	s.say(acc, "c", "1", attack, noon, func(m *model.Message) {
+		m.SenderSourceID, m.ForwardedFrom = "evil", attack
+		m.Attachments = []model.Attachment{{Kind: model.AttachDocument, FileName: attack, Size: 99999999, NoFetch: true, NoFetchReason: attack}}
+	})
+	s.say(acc, "c", "1", attack+" edited", noon, func(m *model.Message) {
+		m.SenderSourceID, m.EditedAt = "evil", noon.Add(time.Minute)
+	})
+
+	list, err := s.store.ChatList([]int64{acc}, 10, 0)
+	if err != nil || len(list) != 1 {
+		t.Fatal(err)
+	}
+	for _, path := range []string{fmt.Sprintf("/s/%d", acc), fmt.Sprintf("/s/%d/c/%d", acc, list[0].ID), "/sources"} {
+		body := s.page(path)
+		lacks(t, body, "<script>alert", "<img src=x", `onerror=alert(2)>"`, "<b>Personal</b>")
+		has(t, body, "&lt;b&gt;Personal&lt;/b&gt;")
+	}
+	has(t, s.page(fmt.Sprintf("/s/%d/c/%d", acc, list[0].ID)), "&lt;script&gt;alert(1)&lt;/script&gt;")
+}
+
+func TestMessageDetails(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	acc := s.account("Personal", "telegram")
+	if err := s.store.UpsertChat(acc, model.Chat{SourceID: "g", Kind: model.ChatGroup, Title: "Flat"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.UpsertSender(acc, model.Sender{SourceID: "dan", DisplayName: "Dan"}); err != nil {
+		t.Fatal(err)
+	}
+	from := func(m *model.Message) { m.SenderSourceID = "dan" }
+
+	s.say(acc, "g", "1", "Room 2 from ten.", noon, from)
+	s.say(acc, "g", "1", "Room 4 from ten.", noon, from, func(m *model.Message) { m.EditedAt = noon.Add(4 * time.Minute) })
+	s.say(acc, "g", "2", "Deleted later", noon.Add(time.Minute), from, func(m *model.Message) { m.ForwardedFrom = "Priya" })
+	if err := s.store.MarkDeleted(acc, "g", []string{"2"}); err != nil {
+		t.Fatal(err)
+	}
+	s.say(acc, "g", "3", "On my way", noon.Add(2*time.Minute), func(m *model.Message) { m.Outgoing, m.SenderSourceID = true, "" })
+	s.say(acc, "g", "4", "Dan pinned a message", noon.Add(3*time.Minute), func(m *model.Message) { m.Kind, m.SenderSourceID = model.KindService, "" })
+	s.say(acc, "g", "5", "line one\nline two", noon.Add(24*time.Hour), from)
+
+	body := s.page(fmt.Sprintf("/s/%d/c/%d", acc, s.chatID(acc, "Flat")))
+	has(t, body, "Group on Telegram, 5 messages since September 2026",
+		`<div class="msg__sender">Dan</div>`, "Room 4 from ten.", "Edited at 12:04, show earlier", "Room 2 from ten.",
+		"Forwarded from Priya", "Deleted at source on", `class="msg msg--out"`, "On my way",
+		`<p class="service"`, "Dan pinned a message", "line one\nline two",
+		"Monday, 28 September 2026", "Tuesday, 29 September 2026")
+	if strings.Count(body, `<div class="msg__sender">`) != 3 {
+		t.Errorf("sender shown %d times; want it on Dan's three messages and not on the owner's", strings.Count(body, `<div class="msg__sender">`))
+	}
+}
+
+func TestAttachmentModes(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	acc := s.account("Personal", "telegram")
+	if err := s.store.SetMediaCap(1000); err != nil {
+		t.Fatal(err)
+	}
+	s.say(acc, "Files", "1", "", noon, func(m *model.Message) {
+		m.Attachments = []model.Attachment{
+			{Kind: model.AttachPhoto, FileName: "plan.jpg", MimeType: "image/jpeg", Size: 5},
+			{Kind: model.AttachVoice, FileName: "note.ogg", MimeType: "audio/ogg", Size: 5},
+			{Kind: model.AttachVideo, FileName: "clip.mp4", MimeType: "video/mp4", Size: 5},
+			{Kind: model.AttachDocument, FileName: "a.pdf", MimeType: "application/pdf", Size: 5},
+			{Kind: model.AttachDocument, FileName: "page.html", MimeType: "text/html", Size: 5},
+			{Kind: model.AttachVideo, FileName: "big.mp4", MimeType: "video/mp4", Size: 3 * 1024 * 1024},
+			{Kind: model.AttachPhoto, FileName: "once.jpg", MimeType: "image/jpeg", Size: 5, Ephemeral: true, NoFetch: true, NoFetchReason: "self-destructing media is not archived"},
+			{Kind: model.AttachDocument, FileName: "waiting.bin", Size: 5},
+			{Kind: model.AttachDocument, FileName: "broken.bin", Size: 5},
+			{Kind: model.AttachDocument, FileName: "gone.bin", Size: 5},
+		}
+	})
+	ref := func(i int) model.AttachmentRef {
+		return model.AttachmentRef{ChatSourceID: "Files", MessageSourceID: "1", Position: i}
+	}
+	for i := range 5 {
+		if err := s.store.PutMedia(acc, ref(i), strings.NewReader("hello")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.store.SetAttachmentStatus(acc, ref(8), model.StatusFailed, "timed out"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.SetAttachmentStatus(acc, ref(9), model.StatusUnavailable, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	body := s.page(fmt.Sprintf("/s/%d/c/%d", acc, s.chatID(acc, "Files")))
+	has(t, body,
+		`<img class="media media--image"`, `alt="plan.jpg"`,
+		`<audio class="media" controls preload="none"`, `<video class="media" controls preload="none"`,
+		"a.pdf", "5 B", ">Download<", "page.html",
+		"big.mp4", "3.0 MB, not downloaded: over size cap", ">Fetch now<",
+		"once.jpg", "Sent as view-once", "self-destructing media is not archived",
+		"waiting.bin", "Waiting to be downloaded",
+		"broken.bin", "The download failed: timed out", ">Try again<",
+		"gone.bin", "No longer available at the source")
+	// HTML is never offered inline, only as a download.
+	if strings.Count(body, "<img ") != 1 {
+		t.Error("something other than the one photo is drawn as an image")
+	}
+	if got := strings.Count(body, `name="csrf"`); got != 4 {
+		t.Errorf("%d CSRF fields; want the sign-out form plus three fetch forms", got)
+	}
+}
+
+func TestYearRail(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	acc := s.account("Personal", "telegram")
+	n := 0
+	at := func(year int, month time.Month, count int) {
+		for range count {
+			n++
+			s.say(acc, "Long", fmt.Sprint(n), "x", time.Date(year, month, 10, 12, 0, n%60, 0, time.UTC))
+		}
+	}
+	at(2024, time.February, 1)
+	at(2025, time.May, 4)
+	at(2026, time.August, 8)
+	path := fmt.Sprintf("/s/%d/c/%d", acc, s.chatID(acc, "Long"))
+
+	body := s.page(path)
+	has(t, body, `<nav class="rail" aria-label="Jump to a quarter">`,
+		`<span class="rail__label">2026</span>`, `<span class="rail__label">2025</span>`, `<span class="rail__label">2024</span>`,
+		fmt.Sprintf(`href="%s?date=2026-07-01"`, path), fmt.Sprintf(`href="%s?date=2024-01-01"`, path),
+		`aria-label="July to September 2026, 8 messages"`, `class="band band--4 band--now"`,
+		`aria-label="April to June 2025, 4 messages"`, `class="band band--2"`,
+		`aria-label="January to March 2024, 1 message"`, `class="band band--1"`,
+		`<option value="2026-01-01" selected>2026</option>`, `<option value="2024-01-01">2024</option>`)
+	if got := strings.Count(body, `class="band`); got != 12 {
+		t.Errorf("%d bands, want four for each of three years", got)
+	}
+
+	old := s.page(path + "?date=2024-01-01")
+	has(t, old, `aria-label="January to March 2024, 1 message"`)
+	if !strings.Contains(old, `<div class="rail__year rail__year--now"><span class="rail__label">2024</span>`) {
+		t.Error("the rail does not mark 2024 as the year being read")
+	}
+}

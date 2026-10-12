@@ -9,7 +9,7 @@
 {{end}}{{if .MoreChatsHref}}<a class="more" href="{{.MoreChatsHref}}">Show more chats</a>{{end}}
 </aside>
 <section class="conversation" aria-label="Conversation">
-<p class="empty empty--center">Choose a chat on the left to read it.</p>
+{{if .Conversation}}{{template "conversation" .}}{{else}}<p class="empty empty--center">Choose a chat on the left to read it.</p>{{end}}
 </section>
 </div>
 </body>
