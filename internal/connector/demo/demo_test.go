@@ -41,7 +41,7 @@ func TestSeedBuildsAnArchiveOnce(t *testing.T) {
 	}
 
 	dan := titles["Dan Whitfield"]
-	quarters, err := store.ChatQuarters(dan.ID)
+	quarters, err := store.ChatQuarters(dan.ID, time.UTC)
 	if err != nil || len(quarters) < 8 {
 		t.Errorf("Dan's chat spans %d quarters; the year rail needs several years: %v", len(quarters), err)
 	}

@@ -274,3 +274,21 @@ func TestConversationPageIsItsOwnScreenOnPhones(t *testing.T) {
 		t.Errorf("jump_controller.js: %d", rec.Code)
 	}
 }
+
+// The year rail counts and jumps in the time zone dates are shown in.
+func TestRailFollowsTheTimeZone(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	la, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.srv.deps.Location = la
+	acc := s.account("Personal", "telegram")
+	s.say(acc, "Dan Whitfield", "1", "happy new year", time.Date(2025, time.December, 31, 20, 0, 0, 0, la))
+	s.say(acc, "Dan Whitfield", "2", "much later", time.Date(2026, time.September, 1, 12, 0, 0, 0, la))
+	path := fmt.Sprintf("/s/%d/c/%d", acc, s.chatID(acc, "Dan Whitfield"))
+
+	has(t, s.page(path), fmt.Sprintf(`href="%s?date=2025-10-01" aria-label="October to December 2025, 1 message"`, path))
+	has(t, s.page(path+"?date=2025-10-01"), "happy new year")
+}

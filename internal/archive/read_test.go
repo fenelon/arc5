@@ -230,13 +230,37 @@ func TestChatQuarters(t *testing.T) {
 	at("5", 2025, time.October)
 	at("6", 2025, time.November)
 
-	got, err := s.ChatQuarters(chatDBID(t, s, acc, "c1"))
+	got, err := s.ChatQuarters(chatDBID(t, s, acc, "c1"), time.UTC)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []Quarter{{2025, 4, 3}, {2024, 2, 1}, {2024, 1, 2}}
 	if !slices.Equal(got, want) {
 		t.Fatalf("quarters = %v, want %v", got, want)
+	}
+	if none, err := s.ChatQuarters(9999, time.UTC); err != nil || len(none) != 0 {
+		t.Errorf("an empty chat = %v, %v", none, err)
+	}
+}
+
+// Quarters are counted in the time zone the reader sees dates in.
+func TestChatQuartersFollowTheTimeZone(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	la, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newYearsEve := textMsg("1", "x")
+	newYearsEve.SentAt = time.Date(2025, time.December, 31, 20, 0, 0, 0, la) // already 2026 in UTC
+	mustUpsert(t, s, acc, newYearsEve)
+	chat := chatDBID(t, s, acc, "c1")
+
+	if got, _ := s.ChatQuarters(chat, la); !slices.Equal(got, []Quarter{{2025, 4, 1}}) {
+		t.Errorf("in Los Angeles: %v, want the last quarter of 2025", got)
+	}
+	if got, _ := s.ChatQuarters(chat, time.UTC); !slices.Equal(got, []Quarter{{2026, 1, 1}}) {
+		t.Errorf("in UTC: %v, want the first quarter of 2026", got)
 	}
 }
 

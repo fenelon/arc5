@@ -142,8 +142,8 @@ func plural(n int, one, many string) string {
 	return fmt.Sprintf("%d %s", n, many)
 }
 
-// rail builds the year rail from a chat's quarters. now is the moment the
-// page is reading, which marks one band and one year.
+// rail builds the year rail from a chat's quarters, counted in the zone of
+// now. now is the moment the page is reading, which marks one band and one year.
 func rail(path string, quarters []archive.Quarter, now time.Time) ([]RailYear, []YearOption) {
 	if len(quarters) == 0 {
 		return nil, nil
@@ -155,7 +155,7 @@ func rail(path string, quarters []archive.Quarter, now time.Time) ([]RailYear, [
 		busiest = max(busiest, q.Messages)
 		newest, oldest = max(newest, q.Year), min(oldest, q.Year)
 	}
-	nowYear, nowQuarter := now.UTC().Year(), (int(now.UTC().Month())+2)/3
+	nowYear, nowQuarter := now.Year(), (int(now.Month())+2)/3
 	var years []RailYear
 	var options []YearOption
 	for year := newest; year >= oldest; year-- {
@@ -241,7 +241,7 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 		s.fail(w, err)
 		return
 	}
-	quarters, err := store.ChatQuarters(chatID)
+	quarters, err := store.ChatQuarters(chatID, s.deps.Location)
 	if err != nil {
 		s.fail(w, err)
 		return
@@ -278,7 +278,7 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 			conv.NewerHref = fmt.Sprintf("%s?after=%d", path, window.Messages[len(window.Messages)-1].ID)
 		}
 	}
-	conv.Years, conv.YearOptions = rail(path, quarters, reading)
+	conv.Years, conv.YearOptions = rail(path, quarters, reading.In(s.deps.Location))
 
 	for _, m := range window.Messages {
 		sent := m.SentAt.In(s.deps.Location)

@@ -302,28 +302,33 @@ type Quarter struct {
 	Messages int
 }
 
-// ChatQuarters counts a chat's messages by quarter (UTC), newest first.
-// Quarters with no messages are not returned.
-func (s *Store) ChatQuarters(chatID int64) ([]Quarter, error) {
-	rows, err := s.r.Query(`
-		SELECT CAST(strftime('%Y', sent_at, 'unixepoch') AS INTEGER) AS y,
-		       (CAST(strftime('%m', sent_at, 'unixepoch') AS INTEGER) + 2) / 3 AS q,
-		       COUNT(*)
-		FROM messages WHERE chat_id = ?
-		GROUP BY y, q ORDER BY y DESC, q DESC`, chatID)
-	if err != nil {
+// ChatQuarters counts a chat's messages by quarter of the year in loc, the
+// time zone the reader sees dates in, newest first. Quarters with no
+// messages are not returned. Each quarter is counted over a range of the
+// (chat, time) index, so this stays quick on long chats.
+func (s *Store) ChatQuarters(chatID int64, loc *time.Location) ([]Quarter, error) {
+	var first, last sql.NullInt64
+	if err := s.r.QueryRow(`SELECT MIN(sent_at), MAX(sent_at) FROM messages WHERE chat_id = ?`, chatID).
+		Scan(&first, &last); err != nil || !first.Valid {
 		return nil, err
 	}
-	defer rows.Close()
+	quarterOf := func(unix int64) time.Time {
+		t := time.Unix(unix, 0).In(loc)
+		return time.Date(t.Year(), (t.Month()-1)/3*3+1, 1, 0, 0, 0, 0, loc)
+	}
+	oldest := quarterOf(first.Int64)
 	var out []Quarter
-	for rows.Next() {
-		var q Quarter
-		if err := rows.Scan(&q.Year, &q.Quarter, &q.Messages); err != nil {
+	for start := quarterOf(last.Int64); !start.Before(oldest); start = start.AddDate(0, -3, 0) {
+		var n int
+		if err := s.r.QueryRow(`SELECT COUNT(*) FROM messages WHERE chat_id = ? AND sent_at >= ? AND sent_at < ?`,
+			chatID, start.Unix(), start.AddDate(0, 3, 0).Unix()).Scan(&n); err != nil {
 			return nil, err
 		}
-		out = append(out, q)
+		if n > 0 {
+			out = append(out, Quarter{Year: start.Year(), Quarter: int(start.Month()-1)/3 + 1, Messages: n})
+		}
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // AttachmentFile is an attachment and, once stored, where its file is.
