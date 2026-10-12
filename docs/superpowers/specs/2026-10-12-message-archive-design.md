@@ -50,7 +50,8 @@ clean, and setup happens in the web interface rather than by editing files.
 
 ## 2. Architecture
 
-One Go binary. One data folder containing `arc5.db` (SQLite, WAL mode) and
+One Go binary. One data folder containing `arc5.db` (SQLite, WAL mode,
+`synchronous=FULL` so an acknowledged message survives a power cut) and
 `media/`.
 
 ```
@@ -65,7 +66,7 @@ One Go binary. One data folder containing `arc5.db` (SQLite, WAL mode) and
 | Unit | Responsibility | Depends on |
 |---|---|---|
 | `archive` | The only writer to the database. Accepts normalized events, stores messages, versions, attachments and media files. Owns migrations. | SQLite, filesystem |
-| `search` | Text analysis (normalizing, stemming), the FTS5 index, query parsing, snippets. The index is derived and rebuildable. | `archive` (read), SQLite |
+| `search` | Text analysis (normalizing, stemming), query parsing, running queries, snippets. It decides what goes into the index; the archive writes the rows. The index is derived and rebuildable. | `archive` (read), SQLite |
 | `connector` | The connector interface, registry, and the runner that supervises connector instances. | `archive` (via `Sink`) |
 | `connector/telegram` | Telegram protocol: login, backfill, live updates, media download. Knows nothing about storage or search. | `connector`, gotd/td |
 | `web` | HTTP server, login, server-rendered pages, media serving. | `archive`, `search`, `connector` |
@@ -92,8 +93,9 @@ internal/config/
 - SQLite: `modernc.org/sqlite` (pure Go, keeps builds cgo-free). The first
   implementation step verifies FTS5 is available in it; if not, fall back to
   `github.com/mattn/go-sqlite3` built with the FTS5 tag.
-- Stemming: a Go Snowball implementation covering the languages offered in
-  settings.
+- Stemming: `github.com/blevesearch/snowballstem`, a Go port of the Snowball
+  stemmers.
+- Unicode normalization: `golang.org/x/text/unicode/norm`.
 - Password hashing: argon2id from `golang.org/x/crypto`.
 - Stimulus: the single-file ES module build, vendored into `internal/web/static`.
 
@@ -231,21 +233,41 @@ Rules the archive enforces:
 
 ### Indexing
 
-`messages_fts` is an FTS5 table with two columns, `exact` and `stem`, keyed by
-`messages.id`, using the `unicode61` tokenizer with diacritics removed.
+`messages_fts` is a contentless FTS5 table with two columns, `exact` and
+`stem`, keyed by `messages.id`. It uses the `ascii` tokenizer, which here only
+splits on spaces: all language handling happens in the `search` unit's
+analyzer. The archive calls the analyzer inside the transaction that stores a
+message and writes the two columns it returns, so a stored message is always
+searchable and the archive remains the only writer.
 
-The `search` unit prepares both columns itself:
+The analyzer:
 
-1. Normalize the text (Unicode NFKC, lowercase) and split into tokens.
-2. `exact` receives the tokens as they are.
-3. `stem` receives, for each token, the output of every configured language's
-   stemmer whose script matches the token (Latin-script stemmers for Latin
-   tokens, the Russian stemmer for Cyrillic, and so on), keeping distinct
-   results.
+1. Splits text into words: runs of letters, numbers and combining marks.
+2. Normalizes each word: Unicode NFKC, lowercase, `ё` to `е`, and accents
+   removed from Latin and Greek letters.
+3. Writes the normalized word to `exact`.
+4. Writes to `stem` the output of every configured language's stemmer whose
+   script matches the word, keeping distinct results.
+5. For scripts written without spaces (Chinese, Japanese, Thai, Lao, Khmer,
+   Burmese), writes overlapping pairs of characters to `exact` instead of
+   words, and no stems.
+
+Stemming is available for Arabic, Danish, Dutch, English, Finnish, French,
+German, Hungarian, Irish, Italian, Norwegian, Portuguese, Romanian, Russian,
+Spanish, Swedish, Tamil and Turkish. Text in any other language is still
+searchable by exact word, prefix and phrase, but not by word form.
 
 There is no per-message language detection; it is unreliable on short chat
-messages. The owner picks languages in settings. Changing the list starts a
-background reindex, also available as `arc5 reindex`.
+messages. The owner picks languages in settings (default: English). Each
+extra language that shares a script adds one more stem per word, so the list
+should hold the languages actually used, not all of them.
+
+The index records the signature of the analyzer that built it (analyzer
+version plus language list). When that no longer matches, the index is rebuilt
+in the background at startup; `arc5 reindex` rebuilds it on demand and
+`arc5 reindex --languages en,ru,es` changes the list first. A rebuild runs in
+small batches so ingestion continues, and messages that arrive during it are
+indexed as usual.
 
 Indexed text is the message's current text plus its attachment file names.
 Earlier versions of an edited message are visible in the chat view but not
@@ -255,9 +277,10 @@ searched. Deleted messages stay indexed.
 
 - Terms are ANDed. A term matches if its exact form is in `exact` or any of
   its stems is in `stem`.
-- `"quoted text"` is a phrase match against `exact` only.
+- `"quoted text"` is a phrase match against `exact` only. Text in a script
+  without spaces is always matched as a run of adjacent character pairs.
 - The last term of an unquoted query also matches as a prefix, for
-  search-as-you-type.
+  search-as-you-type, unless the query ends with a space.
 - Ranking is BM25 with `exact` weighted above `stem`. The owner can switch to
   newest-first.
 - Filters: account, chat, sender, date range, has attachment, deleted at
@@ -439,7 +462,8 @@ attachment (fetch now, retry).
   configured in the interface.
 - `arc5 backup <destination>` writes a consistent copy of the database while
   the server runs (`VACUUM INTO`). Media is plain files, copied by any tool.
-- `arc5 reindex` rebuilds the search index.
+- `arc5 reindex [--languages en,ru,es]` rebuilds the search index, changing
+  the language list first if one is given.
 - Migrations are embedded and run at startup.
 - Distributed as a static binary and a Docker image with the data folder as a
   volume.
