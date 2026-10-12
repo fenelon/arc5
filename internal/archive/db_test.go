@@ -2,9 +2,11 @@ package archive
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 	"testing"
 )
 
@@ -184,5 +186,51 @@ func TestOpenHandlesAwkwardFolderNames(t *testing.T) {
 	}
 	if info.Size() == 0 || info.Mode().Perm() != 0o600 {
 		t.Fatalf("arc5.db size = %d, mode = %o; want a non-empty 0600 file", info.Size(), info.Mode().Perm())
+	}
+}
+
+// The reindex command and the server may have the same data folder open.
+func TestTwoStoresCanWriteToOneFolder(t *testing.T) {
+	dir := t.TempDir()
+	a, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	b, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+	acc := seedChat(t, a)
+
+	const each = 100
+	var wg sync.WaitGroup
+	errs := make(chan error, 2*each)
+	for i, s := range []*Store{a, b} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for n := range each {
+				if _, err := s.UpsertMessage(acc, textMsg(fmt.Sprintf("%d-%d", i, n), "x")); err != nil {
+					errs <- err
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	failed := 0
+	for err := range errs {
+		if failed == 0 {
+			t.Errorf("first failure: %v", err)
+		}
+		failed++
+	}
+	if failed > 0 {
+		t.Fatalf("%d of %d writes failed", failed, 2*each)
+	}
+	if n, _ := a.MessageCount(acc, "c1"); n != 2*each {
+		t.Fatalf("message count = %d, want %d", n, 2*each)
 	}
 }

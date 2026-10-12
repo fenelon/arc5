@@ -59,7 +59,10 @@ func Open(dataDir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	w, err := sql.Open("sqlite", writeDSN)
+	// BEGIN IMMEDIATE takes the write lock up front, so a second process on
+	// this folder waits for busy_timeout instead of failing when a
+	// transaction that began by reading tries to write.
+	w, err := sql.Open("sqlite", writeDSN+"&_txlock=immediate")
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
