@@ -1,0 +1,480 @@
+# arc5: self-hosted message archive — design
+
+Date: 2026-10-12
+Status: approved in conversation, awaiting written-spec review
+Working name: `arc5` (binary, env prefix `ARC5_`)
+
+## 1. Purpose
+
+A self-hosted web tool that keeps a durable, searchable copy of personal
+message history, so the owner can clean out accounts periodically or run with
+auto-delete enabled without losing anything.
+
+Sources plug in through connectors. The first version ships the core and a
+Telegram connector. Email (IMAP) and WhatsApp follow as separate specs.
+
+### Who it is for
+
+One person running one instance for their own accounts. It will be
+open-sourced later, so nothing personal is hard-coded, connector boundaries are
+clean, and setup happens in the web interface rather than by editing files.
+
+### Success criteria
+
+- A message that arrives in an archived Telegram chat while arc5 is running is
+  in the archive, with its media (under the size cap), before Telegram's
+  auto-delete removes it.
+- Deleting or editing a message at the source never removes anything from the
+  archive.
+- Searching a word finds messages containing other forms of that word in each
+  configured language, in well under a second on an archive of a few million
+  messages.
+- It runs as one process with one data folder on a small VPS or home server.
+
+### Decisions made during brainstorming
+
+| Topic | Decision |
+|---|---|
+| Audience | Single user now, open source later |
+| First connector | Telegram; email next; WhatsApp deferred |
+| Capture | Continuous live capture plus backfill; strictly one-way |
+| Chat scope | Private chats and groups on by default; channels and bots opt-in |
+| Media | Download under a configurable size cap; placeholder above it |
+| Languages | English plus other space-separated languages, chosen in settings |
+| Backend | Go |
+| Architecture | Single binary, compiled-in connectors, SQLite with FTS5 |
+| JavaScript | Stimulus, vendored, no frontend build step |
+| Password | Set in the interface, or supplied via `ARC5_PASSWORD` |
+| Backfill | Per-account age limit and speed setting |
+| Self-destructing media | Captured only when opted in; never reported as opened |
+
+## 2. Architecture
+
+One Go binary. One data folder containing `arc5.db` (SQLite, WAL mode) and
+`media/`.
+
+```
+ connectors ──events──▶ archive ──▶ SQLite + media files
+ (telegram, …)             │
+      ▲                    ▼
+   runner               search ◀── web interface
+                                        │
+                           alert ◀── runner status
+```
+
+| Unit | Responsibility | Depends on |
+|---|---|---|
+| `archive` | The only writer to the database. Accepts normalized events, stores messages, versions, attachments and media files. Owns migrations. | SQLite, filesystem |
+| `search` | Text analysis (normalizing, stemming), the FTS5 index, query parsing, snippets. The index is derived and rebuildable. | `archive` (read), SQLite |
+| `connector` | The connector interface, registry, and the runner that supervises connector instances. | `archive` (via `Sink`) |
+| `connector/telegram` | Telegram protocol: login, backfill, live updates, media download. Knows nothing about storage or search. | `connector`, gotd/td |
+| `web` | HTTP server, login, server-rendered pages, media serving. | `archive`, `search`, `connector` |
+| `alert` | Sends the outage webhook. | runner status |
+
+### Layout
+
+```
+cmd/arc5/              main, subcommands: serve, backup, reindex
+internal/archive/      store, migrations, media store
+internal/search/       analyze, index, query, snippet
+internal/connector/    interfaces, registry, runner
+internal/connector/telegram/
+internal/web/          handlers, templates, static (Stimulus controllers, CSS)
+internal/alert/
+internal/config/
+```
+
+### Libraries
+
+- Telegram: `github.com/gotd/td` (pure Go MTProto client with an updates
+  manager that handles gap recovery).
+- SQLite: `modernc.org/sqlite` (pure Go, keeps builds cgo-free). The first
+  implementation step verifies FTS5 is available in it; if not, fall back to
+  `github.com/mattn/go-sqlite3` built with the FTS5 tag.
+- Stemming: a Go Snowball implementation covering the languages offered in
+  settings.
+- Password hashing: argon2id from `golang.org/x/crypto`.
+- Stimulus: the single-file ES module build, vendored into `internal/web/static`.
+
+## 3. Connector interface
+
+```go
+type Connector interface {
+    // Run performs backfill and then live capture. It blocks until ctx is
+    // cancelled or an unrecoverable error occurs.
+    Run(ctx context.Context, sink Sink, state State, settings map[string]string) error
+
+    // Setup returns the interactive flow used to connect an account.
+    Setup(state State) SetupFlow
+
+    // Settings describes the connector's per-account options so the web
+    // interface can render them without connector-specific code.
+    Settings() []Field
+}
+
+type Sink interface {
+    UpsertChat(Chat) error
+    UpsertSender(Sender) error
+    UpsertMessage(Message) error            // new or edited; idempotent
+    MarkDeleted(chatSourceID string, messageSourceIDs []string) error
+    LookupChats(messageSourceID string, kinds []ChatKind) ([]string, error)
+    PutMedia(ref AttachmentRef, r io.Reader) error
+    SetAttachmentStatus(ref AttachmentRef, s AttachmentStatus, reason string) error
+    ChatArchived(chatSourceID string) (bool, error)
+    RequestedMedia() <-chan AttachmentRef   // "fetch now" and retry, ignoring the cap
+    ReportProgress(Progress)                // backfill progress, connection state
+}
+
+type State interface {                      // per-account key-value store
+    Get(key string) ([]byte, error)
+    Set(key string, value []byte) error
+}
+
+type SetupFlow interface {
+    // Next submits the previous step's input and returns the next step, or
+    // a step with Done set.
+    Next(ctx context.Context, input map[string]string) (Step, error)
+}
+
+type Step struct {
+    Title  string
+    Help   string
+    Fields []Field   // name, label, kind (text, secret, number, choice)
+    Done   bool
+}
+```
+
+Connectors are registered by name at build time. An account is one configured
+instance of a connector. The runner starts every enabled account's connector,
+restarts it with exponential backoff (capped at five minutes) when `Run`
+returns an error, and keeps the latest `Progress` per account for the web
+interface and the alert unit.
+
+Settings are passed to `Run` once. When the owner changes an account's
+settings or toggles archiving for one of its chats, the runner cancels and
+restarts that connector. Checkpoints and gap recovery make a restart lossless,
+so connectors need no live-reconfiguration code.
+
+"Fetch now" and "retry" in the interface set the attachment back to `pending`
+and deliver its reference on `RequestedMedia`; the connector downloads it
+through its live queue regardless of the size cap.
+
+`LookupChats` exists because some sources report deletions without naming the
+chat (see Telegram, section 6). It is a read helper, not a storage leak: the
+connector decides which chat kinds to search.
+
+A future out-of-process connector would be one more compiled-in connector that
+speaks a wire protocol to a subprocess; the core does not change.
+
+## 4. Data model
+
+```
+accounts(id, connector, label, settings JSON, enabled, created_at)
+
+chats(id, account_id, source_id, kind, title, archived, created_at,
+      UNIQUE(account_id, source_id))
+      kind: private | group | channel | bot
+
+senders(id, account_id, source_id, display_name, username,
+        UNIQUE(account_id, source_id))
+
+messages(id, chat_id, source_id, sender_id, kind, sent_at, text,
+         reply_to_source_id, forwarded_from, edited_at, deleted_at,
+         captured_at, raw BLOB,
+         UNIQUE(chat_id, source_id))
+         kind: message | service
+
+message_versions(id, message_id, text, replaced_at)
+
+attachments(id, message_id, position, kind, file_name, mime_type, size,
+            sha256, status, reason, ephemeral)
+            kind:   photo | video | audio | voice | document | sticker | other
+            status: pending | stored | skipped | failed | unavailable
+
+connector_state(account_id, key, value BLOB, PRIMARY KEY(account_id, key))
+settings(key, value)
+web_sessions(token_hash, created_at, expires_at)
+messages_fts   -- FTS5, see section 5
+```
+
+Rules the archive enforces:
+
+- **Idempotent ingest.** `UpsertMessage` keys on `(chat_id, source_id)`.
+  Receiving the same message twice changes nothing. Backfill and live capture
+  may overlap, and a connector may replay after a crash.
+- **Edits keep history.** If an upsert carries different text from the stored
+  message, the old text is written to `message_versions` and `edited_at` is set.
+- **Deletions are marks.** `MarkDeleted` sets `deleted_at`. No row or file is
+  removed because the source removed it.
+- **Raw payload.** `raw` holds the source's original message object as
+  compressed JSON, so fields not modelled in v1 (reactions, polls, formatting
+  entities) can be derived later without re-fetching.
+- **Service messages** (joins, calls, pinned-message notices) are stored with
+  `kind = service` and a short rendered description in `text`. They appear in
+  the chat view and are excluded from search by default.
+- **Media files** are stored at `media/<aa>/<bb>/<sha256>`, so identical files
+  are kept once. `attachments.sha256` points at the file.
+- **Size cap.** A global setting, default 50 MB. An attachment over the cap is
+  recorded with `status = skipped` and can be fetched on demand from the
+  interface while the source still has it.
+
+## 5. Search
+
+### Indexing
+
+`messages_fts` is an FTS5 table with two columns, `exact` and `stem`, keyed by
+`messages.id`, using the `unicode61` tokenizer with diacritics removed.
+
+The `search` unit prepares both columns itself:
+
+1. Normalize the text (Unicode NFKC, lowercase) and split into tokens.
+2. `exact` receives the tokens as they are.
+3. `stem` receives, for each token, the output of every configured language's
+   stemmer whose script matches the token (Latin-script stemmers for Latin
+   tokens, the Russian stemmer for Cyrillic, and so on), keeping distinct
+   results.
+
+There is no per-message language detection; it is unreliable on short chat
+messages. The owner picks languages in settings. Changing the list starts a
+background reindex, also available as `arc5 reindex`.
+
+Indexed text is the message's current text plus its attachment file names.
+Earlier versions of an edited message are visible in the chat view but not
+searched. Deleted messages stay indexed.
+
+### Querying
+
+- Terms are ANDed. A term matches if its exact form is in `exact` or any of
+  its stems is in `stem`.
+- `"quoted text"` is a phrase match against `exact` only.
+- The last term of an unquoted query also matches as a prefix, for
+  search-as-you-type.
+- Ranking is BM25 with `exact` weighted above `stem`. The owner can switch to
+  newest-first.
+- Filters: account, chat, sender, date range, has attachment, deleted at
+  source, include service messages. Filters are SQL conditions joined to the
+  FTS match.
+- Results are paged 50 at a time. Each shows chat, sender, time and a snippet.
+- Snippets are built in Go: re-tokenize the original text, mark tokens whose
+  exact form or stems are in the query's term set, and cut a window around the
+  first mark.
+- Opening a result goes to the chat view positioned on that message.
+
+Not in v1: typo tolerance, searching text inside documents.
+
+## 6. Telegram connector
+
+### Access and login
+
+The connector signs in as the owner's user account; bots cannot read personal
+chats. The owner supplies their own `api_id` and `api_hash` from Telegram's
+developer page. The setup flow steps are: API credentials, phone number, login
+code, two-step password (only if the account has one).
+
+The session is stored in `connector_state`. It grants full account access.
+v1 protects it with file permissions (data folder `0700`, database `0600`) and
+a documented warning; encryption at rest is out of scope.
+
+arc5 appears in Telegram's active sessions list and can be revoked from any
+other device. On revocation the account's status becomes "needs login".
+
+### Chat mapping
+
+| Telegram | `chats.kind` | Archived by default |
+|---|---|---|
+| User (including Saved Messages) | private | yes |
+| Basic group, supergroup | group | yes |
+| Broadcast channel | channel | no |
+| Bot | bot | no |
+
+Defaults apply when a chat is first seen. The owner can toggle any chat. The
+connector calls `ChatArchived` before fetching or storing anything for a chat.
+Secret chats are not visible to the API and are not listed.
+
+### Backfill
+
+Per account, in settings:
+
+- **Age limit:** all history, messages since a date, or the last N months.
+  Default: all history.
+- **Speed:** slow (one history request per 5 s), normal (one per 2 s, the
+  default), fast (one per 0.5 s). Pause and resume.
+
+For each archived chat the connector pages backwards, 100 messages per request,
+from the newest message to the age limit, storing a per-chat checkpoint in
+`State` after every page. Chats are processed most-recently-active first.
+
+- Extending the age limit resumes each chat from its checkpoint.
+- Shortening it stops further fetching and deletes nothing.
+- Turning archiving on for a chat queues it for backfill.
+- Telegram's flood-wait responses are always obeyed in full, whatever the speed
+  setting.
+- Speed and age limit affect backfill only.
+
+### Live capture
+
+gotd's updates manager delivers new messages, edits and deletions, and
+recovers gaps after a reconnect using Telegram's difference mechanism. Its
+state is persisted through `State`. If Telegram reports the gap as too long to
+replay, the connector runs a catch-up for each archived chat from the newest
+stored message forward.
+
+Deletion updates for private chats and basic groups carry message IDs without
+a chat; those IDs are unique per account, so the connector resolves the chat
+with `LookupChats`. Supergroup and channel deletions name the channel.
+
+### Media
+
+Attachments are queued for download when their message is stored. The live
+queue always drains before the backfill queue, so media on an auto-deleting
+message is fetched before it expires. Backfill media downloads follow the
+backfill speed setting; live downloads do not. A download is retried three
+times with backoff, then marked `failed` and can be retried from the interface.
+Media that Telegram no longer has is marked `unavailable`.
+
+### Self-destructing and view-once media
+
+Telegram starts the self-destruct countdown when a client reports the media as
+opened (`messages.readMessageContents`). Fetching the file is not a listed
+trigger.
+
+- The connector never calls `messages.readMessageContents` or
+  `channels.readMessageContents`. This is a hard rule with a test that fails if
+  either call appears in the connector's client interface.
+- Capturing such media is off by default and enabled per account by a setting
+  ("Archive self-destructing media"). When off, the message is stored and the
+  attachment is recorded as `skipped` with `ephemeral = 1`.
+- When on, the file is downloaded through the live queue and the attachment is
+  stored with `ephemeral = 1`, which the chat view shows as a label.
+- The claim that downloading alone leaves the media intact for other devices is
+  inferred from the documented trigger, not stated outright. It is confirmed by
+  a manual test (section 9) before the setting is documented as safe.
+
+Chat-level auto-delete timers run from send time and are unaffected by
+anything the connector does.
+
+### What cannot be saved
+
+- Secret chats.
+- Anything deleted before the first backfill reached it.
+- Anything both sent and deleted while arc5 was not connected.
+
+### Failure handling
+
+| Failure | Behaviour |
+|---|---|
+| Network drop | Reconnect with backoff; gap recovery on return |
+| Flood wait | Sleep the stated time; status shows "rate limited until …" |
+| Session revoked or expired | Status "needs login"; no retry until the owner logs in again |
+| Media download fails | Three retries, then `failed`, retryable by hand |
+| Disk full or write error | Ingestion pauses for all accounts with a visible error; nothing is acknowledged or dropped; resumes when writes succeed |
+| Unexpected error in `Run` | Runner restarts the connector with backoff and records the error |
+
+## 7. Alerts
+
+With auto-delete on, an unnoticed outage is permanent loss.
+
+- Every page shows a banner while any enabled account is not connected or
+  ingestion is paused.
+- An optional webhook URL in settings receives a JSON `POST` when an account
+  has been not connected for longer than a threshold (default 15 minutes), when
+  ingestion pauses, and once more on recovery. Body: account label, connector,
+  status, since, last error. Delivery is retried three times; failures are
+  logged and shown on the settings page.
+
+## 8. Web interface
+
+Server-rendered Go templates. JavaScript is Stimulus controllers only, loaded
+as ES modules from files embedded in the binary. Controllers fetch HTML
+fragments from the server and swap them in.
+
+| Page | Contents |
+|---|---|
+| Search (home) | Query box with search-as-you-type, filters, results |
+| Chats | Archived chats with source, kind, last message time, message count |
+| Chat view | Messages in order, keyset-paged in both directions, jump to date, markers for edited (with earlier versions on demand), deleted and ephemeral; inline images, audio and video using the browser's players; "fetch now" on skipped attachments |
+| Sources | Add an account via its setup flow; status and backfill progress (polled); per-chat archive toggles; connector settings |
+| Settings | Password, search languages, media size cap, alert webhook and threshold |
+| Login | Password form |
+
+Stimulus controllers: search (debounced query, filter state), setup-flow
+(step submission), progress (polling), chat (paging, jump to date),
+attachment (fetch now, retry).
+
+### Security
+
+- **Password.** If `ARC5_PASSWORD` is set, it is the login password and the
+  settings field is read-only. Otherwise the owner sets a password on first
+  visit; it is stored as an argon2id hash in `settings`. Until a password
+  exists, every route redirects to the first-run page.
+- **Sessions.** Random token in an `HttpOnly`, `SameSite=Lax` cookie (`Secure`
+  when served over TLS or behind a proxy that says so); only its hash is
+  stored. Sessions last 30 days. Changing the password clears them, including
+  when `ARC5_PASSWORD` differs at startup from the value last seen (detected by
+  comparing against a stored hash).
+- **Login throttling.** Five failed attempts start an increasing delay.
+- **CSRF.** Every state-changing request carries a per-session token.
+- **Untrusted content.** All message text and names are escaped by the
+  templates. Media is served only to a logged-in session, with `nosniff` and a
+  sandboxing content-security policy. Only an allowlist of image, audio and
+  video types is served inline; everything else, including HTML and SVG, is
+  served as a download.
+- **Network.** Listens on `127.0.0.1:8080` by default. Documentation directs
+  the owner to a TLS reverse proxy or a VPN for remote access.
+- **Outbound.** Only to configured sources and the alert webhook.
+
+## 9. Deployment and operations
+
+- `arc5 serve` runs everything. Flags and environment: `--listen` /
+  `ARC5_LISTEN`, `--data` / `ARC5_DATA`, `ARC5_PASSWORD`. Everything else is
+  configured in the interface.
+- `arc5 backup <destination>` writes a consistent copy of the database while
+  the server runs (`VACUUM INTO`). Media is plain files, copied by any tool.
+- `arc5 reindex` rebuilds the search index.
+- Migrations are embedded and run at startup.
+- Distributed as a static binary and a Docker image with the data folder as a
+  volume.
+
+## 10. Testing
+
+- **Archive:** against a real SQLite file in a temp directory. Idempotent
+  upsert, edit versioning, deletion marks, media de-duplication, size cap.
+- **Search:** table-driven with multilingual fixtures: word forms per
+  language, phrases, prefixes, each filter, ranking of exact above stemmed,
+  snippets, reindex after a language change.
+- **Connector contract:** a fake connector emitting duplicates, out-of-order
+  events, edits, deletions with and without a chat, and media, verified against
+  the archive. Runner restart and backoff with a failing fake.
+- **Telegram mapping:** Telegram objects to archive events, on recorded
+  fixtures, including service messages and self-destructing media.
+- **Telegram behaviour:** backfill paging, checkpoints, resume, age limit,
+  speed, flood-wait handling, live-before-backfill media priority, all against
+  a fake client behind a narrow interface. That interface has no method for
+  reporting media as opened, and a test asserts it stays that way.
+- **Web:** handler tests for auth, CSRF, first-run, password from environment,
+  media headers; end-to-end tests for login and search.
+- **Manual, against a test account:** login including two-step password;
+  backfill of a real chat; live message, edit and deletion; auto-delete timer
+  expiring after capture; session revocation. With a second account, send a
+  timed self-destructing photo and a view-once photo and let arc5 download
+  both. Confirm the sender still sees each as unopened, then confirm each opens
+  normally on the phone.
+
+## 11. Out of scope for v1
+
+WhatsApp; email; typo-tolerant search; search inside documents; multiple
+users; encryption at rest; thumbnails; export to other formats; reactions and
+polls as first-class data (kept in `raw`); sending, deleting or otherwise
+changing anything at the source; choosing a licence and publishing.
+
+## 12. Build order
+
+The implementation plan should be split into milestones that each leave a
+working, tested program:
+
+1. Archive, connector interface, runner, fake connector, `serve` skeleton.
+2. Search: analysis, index, query, snippets, `reindex`.
+3. Web interface: login, search, chats, chat view, settings.
+4. Telegram connector: login and setup flow, backfill, live capture, media.
+5. Alerts, `backup`, Docker image, self-destructing media option and its
+   manual test.
