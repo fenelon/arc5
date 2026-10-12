@@ -6,9 +6,16 @@ import (
 	"unicode/utf8"
 )
 
-// maxQueryTerms bounds a query, and a phrase, so that a pasted page of text
-// cannot build an expression the index refuses.
-const maxQueryTerms = 32
+const (
+	// maxQueryTerms bounds the work one query can ask for. Words past the
+	// limit, in the query or in a phrase, are ignored.
+	maxQueryTerms = 32
+	// minPrefixRunes is the shortest word that matches as a prefix while it
+	// is being typed. One or two letters begin a large share of any archive,
+	// which is slow to rank and no use to see; until the word is longer it is
+	// searched as it stands.
+	minPrefixRunes = 3
+)
 
 // parsed is a query in the two forms it is used: the expression the index is
 // asked, and what a snippet should highlight.
@@ -30,14 +37,14 @@ var plainQuotes = strings.NewReplacer("“", `"`, "”", `"`, "„", `"`)
 // numbers and marks, so nothing the owner types can act as FTS5 syntax.
 func (a *Analyzer) parse(query string) parsed {
 	p := parsed{exact: map[string]bool{}, stems: map[string]bool{}}
-	query = plainQuotes.Replace(query)
+	query = prepare(plainQuotes.Replace(query))
 	// A word still being typed matches as a prefix. Trailing space says it is finished.
 	typing := strings.TrimRightFunc(query, unicode.IsSpace) == query
 
 	var groups []string
 	parts := strings.Split(query, `"`) // odd-numbered parts were inside quotes
 	for i, part := range parts {
-		tokens := a.Tokens(part)
+		tokens := withoutTails(a.Tokens(part))
 		if len(tokens) == 0 {
 			continue
 		}
@@ -45,13 +52,26 @@ func (a *Analyzer) parse(query string) parsed {
 			groups = append(groups, p.phrase(tokens))
 			continue
 		}
-		groups = append(groups, p.words(part, tokens, typing && i == len(parts)-1)...)
+		groups = append(groups, p.words(tokens, typing && i == len(parts)-1)...)
 	}
 	if len(groups) > maxQueryTerms {
 		groups = groups[:maxQueryTerms]
 	}
 	p.match = strings.Join(groups, " AND ")
 	return p
+}
+
+// withoutTails drops the lone last characters of unspaced runs. They are
+// indexed so that single characters can be found; a query for the run itself
+// is made of its pairs.
+func withoutTails(tokens []Token) []Token {
+	kept := tokens[:0]
+	for _, t := range tokens {
+		if !t.tail {
+			kept = append(kept, t)
+		}
+	}
+	return kept
 }
 
 // phrase returns a phrase on the exact column.
@@ -64,11 +84,19 @@ func (p *parsed) phrase(tokens []Token) string {
 		words[i] = t.Exact
 		p.exact[t.Exact] = true
 	}
-	return `exact:"` + strings.Join(words, " ") + `"`
+	expr := `exact:"` + strings.Join(words, " ") + `"`
+	// A single character of an unspaced script is indexed as the start of a
+	// token (a pair, or the last character of its run), never as a word of
+	// its own inside a run, so it has to match as a prefix.
+	if last := tokens[len(tokens)-1]; last.Gram && utf8.RuneCountInString(last.Exact) == 1 {
+		p.prefixes = append(p.prefixes, last.Exact)
+		expr += "*"
+	}
+	return expr
 }
 
-// words returns one group per unquoted word of text.
-func (p *parsed) words(text string, tokens []Token, lastIsPrefix bool) []string {
+// words returns one group per unquoted word.
+func (p *parsed) words(tokens []Token, lastIsPrefix bool) []string {
 	var groups []string
 	for i := 0; i < len(tokens); {
 		t := tokens[i]
@@ -78,21 +106,14 @@ func (p *parsed) words(text string, tokens []Token, lastIsPrefix bool) []string 
 			for j < len(tokens) && tokens[j].Gram && tokens[j].Start < tokens[j-1].End {
 				j++
 			}
-			if j == i+1 && utf8.RuneCountInString(text[t.Start:t.End]) == 1 {
-				// One character is stored only as the start of a pair.
-				p.exact[t.Exact] = true
-				p.prefixes = append(p.prefixes, t.Exact)
-				groups = append(groups, `exact:"`+t.Exact+`"*`)
-			} else {
-				groups = append(groups, p.phrase(tokens[i:j]))
-			}
+			groups = append(groups, p.phrase(tokens[i:j]))
 			i = j
 			continue
 		}
 
 		p.exact[t.Exact] = true
 		terms := make([]string, 0, 1+len(t.Stems))
-		if lastIsPrefix && i == len(tokens)-1 {
+		if lastIsPrefix && i == len(tokens)-1 && utf8.RuneCountInString(t.Exact) >= minPrefixRunes {
 			p.prefixes = append(p.prefixes, t.Exact)
 			terms = append(terms, `exact:"`+t.Exact+`"*`)
 		} else {

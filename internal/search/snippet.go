@@ -76,6 +76,7 @@ func forward(text string, pos, n int) int {
 // match, or the start of the text if nothing matches, with "…" fragments
 // where text was cut.
 func (a *Analyzer) snippet(text string, p parsed) []Fragment {
+	text = prepare(text)
 	if text == "" {
 		return nil
 	}

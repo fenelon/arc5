@@ -262,11 +262,107 @@ func TestMessagesArrivingDuringReindexAreIndexed(t *testing.T) {
 	if got := matches(t, s, `exact:"fresh"`); len(got) != n {
 		t.Errorf("%d fresh messages indexed, want %d", len(got), n)
 	}
+	if current, err := s.IndexCurrent(); err != nil || !current {
+		t.Errorf("IndexCurrent after a rebuild with our own writes during it = %v, %v", current, err)
+	}
 }
 
 func TestReaderCannotWrite(t *testing.T) {
 	s := openTemp(t)
 	if _, err := s.Reader().Exec(`INSERT INTO settings (key, value) VALUES ('x', 'y')`); err == nil {
 		t.Fatal("write through Reader succeeded")
+	}
+}
+
+// openIn opens another Store on dir, as a second process would.
+func openIn(t *testing.T, dir string, a Analyzer) *Store {
+	t.Helper()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	if a != nil {
+		s.SetAnalyzer(a)
+	}
+	return s
+}
+
+func mustReindex(t *testing.T, s *Store) {
+	t.Helper()
+	if err := s.Reindex(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if current, err := s.IndexCurrent(); err != nil || !current {
+		t.Fatalf("IndexCurrent right after a rebuild = %v, %v", current, err)
+	}
+}
+
+// Review Focus 3, across processes: a server that keeps running after
+// `arc5 reindex --languages` indexes new messages its old way.
+func TestWriterWithAnotherAnalyzerMakesTheIndexStale(t *testing.T) {
+	dir := t.TempDir()
+	server := openIn(t, dir, wordAnalyzer{sig: "words-1"})
+	acc := seedChat(t, server)
+	mustUpsert(t, server, acc, textMsg("1", "Hello cats"))
+
+	cli := openIn(t, dir, wordAnalyzer{sig: "words-2", tag: "second"})
+	mustReindex(t, cli)
+
+	mustUpsert(t, server, acc, textMsg("2", "Hello dogs")) // indexed without the tag
+	if current, _ := cli.IndexCurrent(); current {
+		t.Fatal("index reported current after a writer with another analyzer added to it")
+	}
+	mustReindex(t, cli)
+	if got := matches(t, cli, `exact:"second"`); !slices.Equal(got, []string{"1", "2"}) {
+		t.Errorf("after the second rebuild = %v", got)
+	}
+}
+
+func TestWriterWithoutAnalyzerMakesTheIndexStale(t *testing.T) {
+	dir := t.TempDir()
+	indexer := openIn(t, dir, wordAnalyzer{sig: "words-1"})
+	acc := seedChat(t, indexer)
+	mustReindex(t, indexer)
+
+	plain := openIn(t, dir, nil)
+	mustUpsert(t, plain, acc, textMsg("1", "Hello cats")) // stored, not indexed
+	if current, _ := indexer.IndexCurrent(); current {
+		t.Fatal("index reported current although a message was stored without being indexed")
+	}
+}
+
+func TestOwnWritesKeepTheIndexCurrent(t *testing.T) {
+	s, acc := indexed(t)
+	mustReindex(t, s)
+	mustUpsert(t, s, acc, textMsg("1", "Hello cats"))
+	edit := textMsg("1", "Hello dogs")
+	edit.EditedAt = t0.Add(time.Minute)
+	mustUpsert(t, s, acc, edit)
+	if current, err := s.IndexCurrent(); err != nil || !current {
+		t.Fatalf("IndexCurrent after our own writes = %v, %v", current, err)
+	}
+}
+
+// Listing messages newest first, with no search text, must not sort the whole table.
+func TestBrowsingByTimeUsesAnIndex(t *testing.T) {
+	s := openTemp(t)
+	rows, err := s.Reader().Query(`EXPLAIN QUERY PLAN SELECT id FROM messages ORDER BY sent_at DESC, id DESC LIMIT 50`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var plan []string
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		plan = append(plan, detail)
+	}
+	joined := strings.Join(plan, "; ")
+	if !strings.Contains(joined, "messages_sent") || strings.Contains(joined, "TEMP B-TREE") {
+		t.Fatalf("plan = %s; want the messages_sent index and no sort", joined)
 	}
 }

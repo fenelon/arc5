@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"database/sql"
+	"slices"
 	"strings"
 	"time"
 
@@ -49,6 +50,9 @@ type Hit struct {
 	Edited     bool
 	Deleted    bool
 	Snippet    []Fragment
+	// Files holds the attachment file names the query matched, highlighted.
+	// A message found only by a file name has nothing to highlight in Snippet.
+	Files [][]Fragment
 }
 
 type Page struct {
@@ -161,5 +165,53 @@ func (s *Searcher) Search(ctx context.Context, q Query) (Page, error) {
 		h.Snippet = s.analyzer.snippet(text, p)
 		page.Hits = append(page.Hits, h)
 	}
-	return page, rows.Err()
+	if err := rows.Err(); err != nil {
+		return Page{}, err
+	}
+	if err := rows.Close(); err != nil {
+		return Page{}, err
+	}
+	if p.match != "" {
+		if err := s.addFiles(ctx, page.Hits, p); err != nil {
+			return Page{}, err
+		}
+	}
+	return page, nil
+}
+
+// addFiles fills in, for each hit, the attachment file names the query
+// matched. The index covers file names, so without this a message found by
+// one would come back with nothing to show for it.
+func (s *Searcher) addFiles(ctx context.Context, hits []Hit, p parsed) error {
+	if len(hits) == 0 {
+		return nil
+	}
+	byID := make(map[int64]*Hit, len(hits))
+	ids := make([]any, len(hits))
+	for i := range hits {
+		byID[hits[i].MessageID] = &hits[i]
+		ids[i] = hits[i].MessageID
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT message_id, file_name FROM attachments
+		WHERE file_name != '' AND message_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+`)
+		ORDER BY message_id, position`, ids...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			id   int64
+			name string
+		)
+		if err := rows.Scan(&id, &name); err != nil {
+			return err
+		}
+		fragments := s.analyzer.snippet(name, p)
+		if slices.ContainsFunc(fragments, func(f Fragment) bool { return f.Match }) {
+			byID[id].Files = append(byID[id].Files, fragments)
+		}
+	}
+	return rows.Err()
 }

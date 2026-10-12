@@ -8,3 +8,7 @@ CREATE VIRTUAL TABLE messages_fts USING fts5(
   contentless_delete = 1,
   tokenize = 'ascii'
 );
+
+-- Listing messages newest first across all chats (browsing with filters but
+-- no search text) walks this index instead of sorting the whole table.
+CREATE INDEX messages_sent ON messages (sent_at, id);

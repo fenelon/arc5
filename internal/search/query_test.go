@@ -90,3 +90,37 @@ func TestParseCapsTheNumberOfTerms(t *testing.T) {
 		t.Errorf("phrase holds %d words, want %d", got, maxQueryTerms)
 	}
 }
+
+// A one- or two-letter prefix matches a large share of any archive, which is
+// slow and useless; such a word is searched as it stands until it is longer.
+func TestShortWordsAreNotPrefixes(t *testing.T) {
+	a := mustAnalyzer(t)
+	for query, want := range map[string]string{
+		"c":      `exact:"c"`,
+		"ca":     `exact:"ca"`,
+		"cat":    `exact:"cat"*`,
+		"big ca": `exact:"big" AND exact:"ca"`,
+		"яб":     `exact:"яб"`,
+		"ябл":    `exact:"ябл"*`,
+	} {
+		if got := a.parse(query).match; got != want {
+			t.Errorf("parse(%q) = %s, want %s", query, got, want)
+		}
+	}
+}
+
+func TestSingleCharactersOfUnspacedScripts(t *testing.T) {
+	a := mustAnalyzer(t)
+	for query, want := range map[string]string{
+		`猫`:          `exact:"猫"*`, // every character starts a token, so a prefix finds it anywhere
+		`"猫"`:        `exact:"猫"*`,
+		`"I love 猫"`: `exact:"i love 猫"*`,
+		`猫猫`:         `exact:"猫猫"`,
+		`"東京都"`:      `exact:"東京 京都"`, // the lone last character belongs to the index, not to queries
+		`東京都 `:       `exact:"東京 京都"`,
+	} {
+		if got := a.parse(query).match; got != want {
+			t.Errorf("parse(%q) = %s, want %s", query, got, want)
+		}
+	}
+}

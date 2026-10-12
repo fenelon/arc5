@@ -44,11 +44,11 @@ func TestTokensOfSpacedText(t *testing.T) {
 func TestTokensOfUnspacedScriptsAreCharacterPairs(t *testing.T) {
 	a := mustAnalyzer(t, "en")
 	for text, want := range map[string][]string{
-		"東京都":          {"東京", "京都"},
+		"東京都":          {"東京", "京都", "都"},
 		"東":            {"東"},
-		"コーヒー":         {"コー", "ーヒ", "ヒー"},
-		"iPhone15を買った": {"iphone15", "を買", "買っ", "った"},
-		"東京 タワー":       {"東京", "タワ", "ワー"},
+		"コーヒー":         {"コー", "ーヒ", "ヒー", "ー"},
+		"iPhone15を買った": {"iphone15", "を買", "買っ", "った", "た"},
+		"東京 タワー":       {"東京", "京", "タワ", "ワー", "ー"},
 	} {
 		tokens := a.Tokens(text)
 		if got := exacts(tokens); !slices.Equal(got, want) {
@@ -64,9 +64,9 @@ func TestTokensOfUnspacedScriptsAreCharacterPairs(t *testing.T) {
 		}
 	}
 
-	thai := a.Tokens("สวัสดี") // six characters, so five overlapping pairs
-	if len(thai) != 5 {
-		t.Fatalf("Thai tokens = %q, want 5 pairs", exacts(thai))
+	thai := a.Tokens("สวัสดี") // six characters: five overlapping pairs, then the last one alone
+	if len(thai) != 6 {
+		t.Fatalf("Thai tokens = %q, want 5 pairs and the last character", exacts(thai))
 	}
 }
 
@@ -86,7 +86,8 @@ func TestTokenOffsetsPointIntoTheOriginalText(t *testing.T) {
 		t.Errorf("second token covers %q, want Bób", got)
 	}
 	pairs := tokens[2:]
-	if len(pairs) != 2 || text[pairs[0].Start:pairs[0].End] != "東京" || text[pairs[1].Start:pairs[1].End] != "京都" {
+	if len(pairs) != 3 || text[pairs[0].Start:pairs[0].End] != "東京" || text[pairs[1].Start:pairs[1].End] != "京都" ||
+		text[pairs[2].Start:pairs[2].End] != "都" || !pairs[2].tail || pairs[0].tail || pairs[1].tail {
 		t.Errorf("pairs = %+v", pairs)
 	}
 	if pairs[1].Start >= pairs[0].End {
@@ -116,7 +117,7 @@ func TestIndexColumns(t *testing.T) {
 		t.Errorf("stem = %q", stem)
 	}
 	exact, stem = mustAnalyzer(t).Index("東京都 2024")
-	if exact != "東京 京都 2024 " || stem != "" {
+	if exact != "東京 京都 都 2024 " || stem != "" {
 		t.Errorf("exact = %q, stem = %q", exact, stem)
 	}
 }
@@ -134,5 +135,34 @@ func TestTokensNeverContainAsciiSeparators(t *testing.T) {
 				t.Errorf("token form %q (from %q) would be split by the index", form, text[tok.Start:tok.End])
 			}
 		}
+	}
+}
+
+// Text that reads the same must be indexed the same, however it was typed or stored.
+func TestEquivalentSpellingsIndexAlike(t *testing.T) {
+	a := mustAnalyzer(t, "en", "ru")
+	for _, c := range []struct{ name, odd, plain string }{
+		{"soft hyphen inside a word", "an exam\u00adple here", "an example here"},
+		{"zero-width non-joiner inside a word", "ex\u200cample", "example"},
+		{"stress marks on Russian vowels", "большо\u0301й за\u0301мок", "большой замок"},
+		{"decomposed kana, as in macOS file names", norm.NFD.String("ドキュメント"), "ドキュメント"},
+		{"half-width kana", "ｶﾞｲﾄﾞ", "ガイド"},
+		{"decomposed accents", norm.NFD.String("crème brûlée"), "crème brûlée"},
+		{"keycap digit", "1\ufe0f\u20e3 one", "1 one"},
+	} {
+		oddExact, oddStem := a.Index(c.odd)
+		exact, stem := a.Index(c.plain)
+		if oddExact != exact || oddStem != stem {
+			t.Errorf("%s:\n  %q indexes as %q / %q\n  %q indexes as %q / %q", c.name, c.odd, oddExact, oddStem, c.plain, exact, stem)
+		}
+	}
+	// Letters that merely look accented keep their identity.
+	for _, word := range []string{"мой", "ѓорѓи", "ёж"} {
+		if exact, _ := a.Index(word); exact != fold(normalizeWord(word))+" " {
+			t.Errorf("Index(%q) = %q", word, exact)
+		}
+	}
+	if exact, _ := a.Index("ѓ г"); exact != "ѓ г " {
+		t.Errorf("Macedonian ѓ was folded into г: %q", exact)
 	}
 }

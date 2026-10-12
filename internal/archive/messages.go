@@ -151,9 +151,15 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 		}
 	}
 
-	if analyzer := s.currentAnalyzer(); analyzer != nil && changed {
-		if err := indexMessage(tx, analyzer, id); err != nil {
+	if changed {
+		analyzer := s.currentAnalyzer()
+		if err := noteIndexWrite(tx, analyzer); err != nil {
 			return nil, err
+		}
+		if analyzer != nil {
+			if err := indexMessage(tx, analyzer, id); err != nil {
+				return nil, err
+			}
 		}
 	}
 

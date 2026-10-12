@@ -243,14 +243,19 @@ searchable and the archive remains the only writer.
 The analyzer:
 
 1. Splits text into words: runs of letters, numbers and combining marks.
-2. Normalizes each word: Unicode NFKC, lowercase, `ё` to `е`, and accents
-   removed from Latin and Greek letters.
+   Invisible characters inside a word (soft hyphen, zero-width joiners) do not
+   split it.
+2. Normalizes each word: Unicode NFKC, lowercase, `ё` to `е`, stress marks
+   removed from Cyrillic vowels, and accents removed from Latin and Greek
+   letters. Text is canonically composed first and half-width kana widened, so
+   text that reads the same is indexed the same.
 3. Writes the normalized word to `exact`.
 4. Writes to `stem` the output of every configured language's stemmer whose
    script matches the word, keeping distinct results.
 5. For scripts written without spaces (Chinese, Japanese, Thai, Lao, Khmer,
    Burmese), writes overlapping pairs of characters to `exact` instead of
-   words, and no stems.
+   words, then the last character of the run on its own, and no stems. Every
+   character therefore begins a token, so a one-character query finds it.
 
 Stemming is available for Arabic, Danish, Dutch, English, Finnish, French,
 German, Hungarian, Irish, Italian, Norwegian, Portuguese, Romanian, Russian,
@@ -263,8 +268,10 @@ extra language that shares a script adds one more stem per word, so the list
 should hold the languages actually used, not all of them.
 
 The index records the signature of the analyzer that built it (analyzer
-version plus language list). When that no longer matches, the index is rebuilt
-in the background at startup; `arc5 reindex` rebuilds it on demand and
+version plus language list). A process that stores a message while using a
+different analyzer, or none, marks the index dirty in the same transaction.
+When the signature no longer matches or the index is dirty, it is rebuilt in
+the background at startup; `arc5 reindex` rebuilds it on demand and
 `arc5 reindex --languages en,ru,es` changes the list first. A rebuild runs in
 small batches so ingestion continues, and messages that arrive during it are
 indexed as usual.
@@ -280,13 +287,16 @@ searched. Deleted messages stay indexed.
 - `"quoted text"` is a phrase match against `exact` only. Text in a script
   without spaces is always matched as a run of adjacent character pairs.
 - The last term of an unquoted query also matches as a prefix, for
-  search-as-you-type, unless the query ends with a space.
+  search-as-you-type, unless the query ends with a space or the term is
+  shorter than three characters. A one- or two-letter prefix matches a large
+  share of the archive, which is slow to rank and no use to see.
 - Ranking is BM25 with `exact` weighted above `stem`. The owner can switch to
   newest-first.
 - Filters: account, chat, sender, date range, has attachment, deleted at
   source, include service messages. Filters are SQL conditions joined to the
   FTS match.
-- Results are paged 50 at a time. Each shows chat, sender, time and a snippet.
+- Results are paged 50 at a time. Each shows chat, sender, time, a snippet,
+  and any attachment file names the query matched, highlighted.
 - Snippets are built in Go: re-tokenize the original text, mark tokens whose
   exact form or stems are in the query's term set, and cut a window around the
   first mark.

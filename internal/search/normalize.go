@@ -9,19 +9,31 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
+// cyrillicVowels can carry a stress mark, which dictionaries and careful
+// writers add and which is no part of the spelling.
+const cyrillicVowels = "аеиоуыэюяіїє"
+
 // normalizeWord prepares a word for stemming. Compatibility forms are unified
 // and case is dropped. ё becomes е: Russian treats them as one letter, and so
-// does its stemmer. Anything that is not a letter, number or mark, which
-// normalization can introduce, is removed.
+// does its stemmer. Stress marks on Cyrillic vowels, keycap and emoji-style
+// decorations, and anything else that is not a letter, number or mark are
+// removed.
 func normalizeWord(raw string) string {
 	var b strings.Builder
+	var prev rune
 	for _, r := range strings.ToLower(norm.NFKC.String(raw)) {
 		switch {
 		case r == 'ё':
-			b.WriteRune('е')
-		case unicode.IsLetter(r), unicode.IsNumber(r), unicode.IsMark(r):
-			b.WriteRune(r)
+			r = 'е'
+		case (r == 0x0300 || r == 0x0301) && strings.ContainsRune(cyrillicVowels, prev):
+			continue
+		case unicode.Is(unicode.Me, r), unicode.Is(unicode.Variation_Selector, r):
+			continue
+		case !(unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsMark(r)):
+			continue
 		}
+		b.WriteRune(r)
+		prev = r
 	}
 	return b.String()
 }

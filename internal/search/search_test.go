@@ -10,6 +10,7 @@ import (
 
 	"github.com/fenelon/arc5/internal/archive"
 	"github.com/fenelon/arc5/internal/model"
+	"golang.org/x/text/unicode/norm"
 )
 
 var day = time.Unix(1_700_000_000, 0).UTC()
@@ -362,5 +363,71 @@ func TestSearchStopsWhenCancelled(t *testing.T) {
 	cancel()
 	if _, err := f.search.Search(ctx, Query{Text: "cats "}); err == nil {
 		t.Fatal("Search with a cancelled context succeeded")
+	}
+}
+
+func TestAnyCharacterOfAnUnspacedRunCanBeFound(t *testing.T) {
+	f := newFixture(t, "en")
+	cat := f.say("我有一只猫")
+	thanks := f.say("谢谢你。再见")
+	tokyo := f.say("東京都に行く")
+	cats := f.say("I love 猫猫")
+	for query, want := range map[string][]string{
+		"猫":          {cat, cats}, // last character of its run
+		"你":          {thanks},
+		"く":          {tokyo},
+		"我":          {cat}, // first character
+		"只":          {cat}, // in the middle
+		`"猫"`:        {cat, cats},
+		`"I love 猫"`: {cats},
+		"再见":         {thanks},
+	} {
+		if got := f.text(query); !same(got, want...) {
+			t.Errorf("%q found %v, want %v", query, got, want)
+		}
+	}
+}
+
+func TestFindsTextHoweverItWasSpelled(t *testing.T) {
+	f := newFixture(t, "en", "ru")
+	hyphen := f.say("an exam\u00adple here")
+	stress := f.say("большо\u0301й за\u0301мок")
+	halfwidth := f.say("ｶﾞｲﾄﾞ")
+	decomposed := f.say(norm.NFD.String("ドキュメント"))
+	for query, want := range map[string]string{
+		"example ": hyphen, "замок ": stress, "большой ": stress,
+		"ガイド": halfwidth, "ｶﾞｲﾄﾞ": halfwidth, "ドキュメント": decomposed,
+	} {
+		if got := f.text(query); !same(got, want) {
+			t.Errorf("%q found %v, want [%s]", query, got, want)
+		}
+	}
+}
+
+// A hit found by a file name must show which file, or the result row is blank.
+func TestHitShowsMatchingFileNames(t *testing.T) {
+	f := newFixture(t, "en")
+	f.say("", func(m *model.Message) {
+		m.Attachments = []model.Attachment{
+			{Kind: model.AttachDocument, FileName: "Quarterly_Report.pdf", Size: 1},
+			{Kind: model.AttachPhoto, FileName: "holiday.jpg", Size: 1},
+		}
+	})
+	f.say("the quarterly numbers, no file")
+	hits := f.page(Query{Text: "quarterly ", Sort: ByNewest}).Hits
+	if len(hits) != 2 {
+		t.Fatalf("%d hits, want 2", len(hits))
+	}
+	if len(hits[0].Files) != 0 || render(hits[0].Snippet) != "the [quarterly] numbers, no file" {
+		t.Errorf("text hit: snippet %q, files %v", render(hits[0].Snippet), hits[0].Files)
+	}
+	if len(hits[1].Files) != 1 || render(hits[1].Files[0]) != "[Quarterly]_Report.pdf" {
+		t.Errorf("file hit: files = %v; want only the matching name, highlighted", hits[1].Files)
+	}
+	// Browsing without search text has nothing to highlight, so it lists no files.
+	for _, h := range f.page(Query{}).Hits {
+		if len(h.Files) != 0 {
+			t.Errorf("browse hit lists files %v", h.Files)
+		}
 	}
 }
