@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Manage sources</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geologica:wght@300..700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0B6E7F}a:hover{color:#084F5C}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #EEF3F5; color: #0D2530; font-family: 'Geologica', system-ui, sans-serif; font-weight: 350; font-size: 15px; line-height: 1.45">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 10px 20px; background: #FFFFFF; border-bottom: 1px solid #CFDBDF">
+<a href="Strata.dc.html" style="display: inline-flex; align-items: center; gap: 10px; color: #0D2530; text-decoration: none">
+<span aria-hidden="true" style="display: flex; flex-direction: column; gap: 3px; width: 22px">
+<span style="height: 4px; width: 22px; border-radius: 2px; background: #9CCBD3"></span>
+<span style="height: 4px; width: 16px; border-radius: 2px; background: #3F97A6"></span>
+<span style="height: 4px; width: 22px; border-radius: 2px; background: #0B6E7F"></span>
+<span style="height: 4px; width: 12px; border-radius: 2px; background: #0D2530"></span>
+</span>
+<span style="font-weight: 700; font-size: 21px; letter-spacing: -0.02em">arc5</span>
+</a>
+<a href="Main.dc.html" aria-haspopup="true" aria-label="Source: Personal, Telegram. Choose another source" style="display: inline-flex; align-items: center; gap: 10px; min-height: 44px; box-sizing: border-box; padding: 4px 12px; color: #0D2530; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 8px; text-decoration: none">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 30px; height: 30px; margin-left: -5px; border-radius: 7px; background: #E0F2FB"><svg width="18" height="18" viewBox="0 0 24 24" fill="#26A5E4"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"></path></svg></span>
+<span style="display: flex; flex-direction: column; line-height: 1.2"><span style="font-weight: 600">Personal</span><span style="font-size: 12px; color: #4C6470">Telegram</span></span>
+<span role="img" aria-label="Live" title="Live" style="flex-shrink: 0; width: 8px; height: 8px; margin: 0 4px; border-radius: 50%; background: #1E9E6A; box-shadow: 0 0 0 3px #CFEEDD"></span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4C6470" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+</a>
+<span style="flex: 1 1 200px"></span>
+<a href="Settings.dc.html" style="font-weight: 450; color: #0D2530; text-decoration: none">Settings</a>
+</header>
+
+<div role="alert" style="background: #FBEBCB; border-bottom: 1px solid #E9CF95">
+<div style="max-width: 980px; margin: 0 auto; padding: 12px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; color: #4A2B00">
+<span style="flex: 1 1 320px"><span style="font-weight: 600">Work is not archiving.</span> Telegram signed it out on 11 October at 08:15. Messages sent since then are not saved, and ones that auto-delete cannot be recovered.</span>
+<a href="Sources.dc.html" style="padding: 10px 16px; font-weight: 600; color: #FFFFFF; background: #7A4700; border-radius: 8px; text-decoration: none">Log in again</a>
+</div>
+</div>
+
+<main style="max-width: 980px; margin: 0 auto; padding: 28px 24px 64px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px">
+<h1 style="margin: 0; font-weight: 650; font-size: 28px; letter-spacing: -0.02em">Sources</h1>
+<a href="Sources.dc.html" style="display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; font-weight: 600; color: #FFFFFF; background: #0B6E7F; border-radius: 8px; text-decoration: none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add a source</a>
+</div>
+
+<h2 style="margin: 22px 0 8px; font-size: 14px; font-weight: 600; color: #4C6470">Messengers, shown as chats</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px">
+
+<a href="Sources.dc.html" aria-current="true" style="display: flex; align-items: center; gap: 12px; min-height: 60px; box-sizing: border-box; padding: 9px 11px; color: #0D2530; text-decoration: none; background: #F1F8F9; border: 2px solid #0B6E7F; border-radius: 10px">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 38px; height: 38px; border-radius: 9px; background: #E0F2FB"><svg width="22" height="22" viewBox="0 0 24 24" fill="#26A5E4"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"></path></svg></span>
+<span style="flex: 1 1 auto; min-width: 0"><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; font-size: 16px">Personal</span><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; color: #3A525D">Telegram, last message 2 minutes ago</span></span>
+<span role="img" aria-label="Live" title="Live" style="flex-shrink: 0; width: 10px; height: 10px; margin-right: 5px; border-radius: 50%; background: #1E9E6A; box-shadow: 0 0 0 4px #CFEEDD"></span>
+</a>
+
+<a href="Sources.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 60px; box-sizing: border-box; padding: 10px 12px; color: #0D2530; text-decoration: none; background: #FFFFFF; border: 1px solid #E9CF95; border-radius: 10px">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 38px; height: 38px; border-radius: 9px; background: #E0F2FB"><svg width="22" height="22" viewBox="0 0 24 24" fill="#26A5E4"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"></path></svg></span>
+<span style="flex: 1 1 auto; min-width: 0"><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; font-size: 16px">Work</span><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; color: #7A4700">Telegram, needs login</span></span>
+<span role="img" aria-label="Needs login" title="Needs login" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: #FBEBCB"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7A4700" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 018 0v3"></path></svg></span>
+</a>
+
+<a href="Sources.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 60px; box-sizing: border-box; padding: 10px 12px; color: #0D2530; text-decoration: none; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 10px">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 38px; height: 38px; border-radius: 9px; background: #DFF7E8"><svg width="22" height="22" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"></path></svg></span>
+<span style="flex: 1 1 auto; min-width: 0"><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; font-size: 16px">Family phone</span><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; color: #4C6470">WhatsApp, last message 40 minutes ago</span></span>
+<span role="img" aria-label="Live" title="Live" style="flex-shrink: 0; width: 10px; height: 10px; margin-right: 5px; border-radius: 50%; background: #1E9E6A; box-shadow: 0 0 0 4px #CFEEDD"></span>
+</a>
+</div>
+
+<h2 style="margin: 20px 0 8px; font-size: 14px; font-weight: 600; color: #4C6470">Mailboxes, shown as mail</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px">
+
+<a href="Sources.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 60px; box-sizing: border-box; padding: 10px 12px; color: #0D2530; text-decoration: none; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 10px">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 38px; height: 38px; border-radius: 9px; background: #E3F1F4"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B6E7F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg></span>
+<span style="flex: 1 1 auto; min-width: 0"><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; font-size: 16px">Home mail</span><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; color: #4C6470">Email, me@example.org</span></span>
+<span role="img" aria-label="Live" title="Live" style="flex-shrink: 0; width: 10px; height: 10px; margin-right: 5px; border-radius: 50%; background: #1E9E6A; box-shadow: 0 0 0 4px #CFEEDD"></span>
+</a>
+
+<a href="Sources.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 60px; box-sizing: border-box; padding: 10px 12px; color: #0D2530; text-decoration: none; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 10px">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 38px; height: 38px; border-radius: 9px; background: #E3F1F4"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B6E7F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg></span>
+<span style="flex: 1 1 auto; min-width: 0"><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; font-size: 16px">Work mail</span><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; color: #4C6470">Email, work@example.org</span></span>
+<span role="img" aria-label="Live" title="Live" style="flex-shrink: 0; width: 10px; height: 10px; margin-right: 5px; border-radius: 50%; background: #1E9E6A; box-shadow: 0 0 0 4px #CFEEDD"></span>
+</a>
+
+<a href="Sources.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 60px; box-sizing: border-box; padding: 10px 12px; color: #0D2530; text-decoration: none; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 10px">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 38px; height: 38px; border-radius: 9px; background: #E3F1F4"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B6E7F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg></span>
+<span style="flex: 1 1 auto; min-width: 0"><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; font-size: 16px">University</span><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; color: #4C6470">Email, 3 of 9 folders caught up</span></span>
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4C6470" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Catching up on history" style="flex-shrink: 0"><title>Catching up on history</title><path d="M20 11a8 8 0 00-14.5-4.5L4 8"></path><path d="M4 4v4h4"></path><path d="M4 13a8 8 0 0014.5 4.5L20 16"></path><path d="M20 20v-4h-4"></path></svg>
+</a>
+</div>
+
+<section aria-labelledby="detail-title" style="margin-top: 28px; background: #FFFFFF; border: 2px solid #0B6E7F; border-radius: 12px; overflow: hidden">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 20px; background: #F1F8F9; border-bottom: 1px solid #B9DADF">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 8px; background: #E0F2FB"><svg width="20" height="20" viewBox="0 0 24 24" fill="#26A5E4"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"></path></svg></span>
+<h2 id="detail-title" style="margin: 0; flex: 1 1 200px; font-weight: 650; font-size: 20px">Settings for Personal</h2>
+<a href="Strata.dc.html" style="font-weight: 600">Open its chats</a>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0">
+
+<div style="padding: 16px 20px; border-bottom: 1px solid #E4ECEE">
+<h3 style="margin: 0 0 8px; font-weight: 600; font-size: 16px">Name</h3>
+<form style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 4px; flex: 1 1 180px"><label for="src-name" style="font-size: 13px; color: #4C6470">Shown in the source picker</label><input id="src-name" type="text" value="Personal" style="width: 100%; height: 44px; box-sizing: border-box; padding: 0 12px; font: inherit; color: #0D2530; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 8px"></div>
+<button type="submit" style="height: 44px; padding: 0 16px; font: inherit; font-weight: 600; color: #FFFFFF; background: #0B6E7F; border: 0; border-radius: 8px">Rename</button>
+</form>
+</div>
+
+<div style="padding: 16px 20px; border-bottom: 1px solid #E4ECEE">
+<h3 style="margin: 0 0 8px; font-weight: 600; font-size: 16px">Chats</h3>
+<p style="margin: 0 0 8px; color: #4C6470">Private chats and groups are archived as they appear. Channels and bots only when you switch them on.</p>
+<a href="Sources.dc.html" style="font-weight: 600">Choose which of the 112 chats are archived</a>
+</div>
+
+<div style="padding: 16px 20px; border-bottom: 1px solid #E4ECEE">
+<h3 style="margin: 0 0 8px; font-weight: 600; font-size: 16px">History catch-up</h3>
+<div style="display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px"><span>In progress</span><span style="font-size: 13.5px; color: #4C6470; font-variant-numeric: tabular-nums">37 of 112 chats</span></div>
+<div role="progressbar" aria-label="History catch-up" aria-valuemin="0" aria-valuemax="112" aria-valuenow="37" style="height: 9px; margin-top: 8px; background: #E4ECEE; border-radius: 2px; overflow: hidden"><div style="width: 33%; height: 9px; background: #0B6E7F"></div></div>
+<form style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; margin-top: 14px">
+<div style="display: flex; flex-direction: column; gap: 4px"><label for="bf-age" style="font-size: 13px; color: #4C6470">How far back</label><select id="bf-age" style="height: 44px; padding: 0 10px; font: inherit; color: #0D2530; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 8px"><option>All history</option><option>Last 12 months</option><option>Last 3 years</option><option>Since a date</option></select></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><label for="bf-speed" style="font-size: 13px; color: #4C6470">Speed</label><select id="bf-speed" style="height: 44px; padding: 0 10px; font: inherit; color: #0D2530; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 8px"><option>Slow</option><option selected>Normal</option><option>Fast</option></select></div>
+<button type="submit" style="height: 44px; padding: 0 16px; font: inherit; font-weight: 600; color: #FFFFFF; background: #0B6E7F; border: 0; border-radius: 8px">Save</button>
+<button type="button" style="height: 44px; padding: 0 16px; font: inherit; font-weight: 600; color: #0D2530; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 8px">Pause catch-up</button>
+</form>
+<p style="margin: 10px 0 0; font-size: 13.5px; color: #4C6470">New messages are saved the moment they arrive, whatever this is doing.</p>
+</div>
+
+<div style="padding: 16px 20px; border-bottom: 1px solid #E4ECEE">
+<h3 style="margin: 0 0 8px; font-weight: 600; font-size: 16px">Self-destructing media</h3>
+<label style="display: flex; align-items: flex-start; gap: 10px"><input type="checkbox" style="width: 18px; height: 18px; margin: 3px 0 0; flex-shrink: 0"><span><span style="font-weight: 600">Keep self-destructing and view-once media</span><span style="display: block; font-size: 13.5px; color: #4C6470">Off unless you turn it on. The sender expected it to disappear. Saving it does not mark it as opened.</span></span></label>
+</div>
+
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 12px 20px; background: #F5F8F9">
+<a href="Sources.dc.html" style="font-weight: 600">Sign this source out</a>
+<a href="Sources.dc.html" style="font-weight: 600; color: #7A4700">Remove this source and keep its archive</a>
+</div>
+</section>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":1320}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

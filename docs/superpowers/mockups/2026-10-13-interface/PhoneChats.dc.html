@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone, light: chats</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geologica:wght@300..700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0B6E7F}a:hover{color:#084F5C}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; background: #FFFFFF; color: #0D2530; font-family: 'Geologica', system-ui, sans-serif; font-weight: 350; font-size: 15px; line-height: 1.45">
+
+<header style="display: flex; flex-direction: column; gap: 10px; padding: 10px 14px 12px; background: #FFFFFF; border-bottom: 1px solid #CFDBDF">
+<div style="display: flex; align-items: center; gap: 10px">
+<a href="PhoneChats.dc.html" aria-label="arc5" style="display: inline-flex; flex-direction: column; gap: 3px; width: 22px; padding: 6px 0">
+<span aria-hidden="true" style="height: 4px; width: 22px; border-radius: 2px; background: #9CCBD3"></span>
+<span aria-hidden="true" style="height: 4px; width: 16px; border-radius: 2px; background: #3F97A6"></span>
+<span aria-hidden="true" style="height: 4px; width: 22px; border-radius: 2px; background: #0B6E7F"></span>
+<span aria-hidden="true" style="height: 4px; width: 12px; border-radius: 2px; background: #0D2530"></span>
+</a>
+<a href="Main.dc.html" aria-haspopup="true" aria-label="Source: Personal, Telegram, live. Choose another source" style="display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; min-height: 44px; box-sizing: border-box; padding: 4px 12px 4px 10px; color: #0D2530; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 8px; text-decoration: none">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 30px; height: 30px; margin-left: -4px; border-radius: 7px; background: #E0F2FB"><svg width="18" height="18" viewBox="0 0 24 24" fill="#26A5E4"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"></path></svg></span>
+<span style="display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; line-height: 1.2"><span style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600">Personal</span><span style="font-size: 12px; color: #4C6470">Telegram</span></span>
+<span role="img" aria-label="Live" title="Live" style="flex-shrink: 0; width: 8px; height: 8px; margin: 0 4px; border-radius: 50%; background: #1E9E6A; box-shadow: 0 0 0 3px #CFEEDD"></span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4C6470" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M6 9l6 6 6-6"></path></svg>
+</a>
+<a href="Settings.dc.html" aria-label="Settings" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; color: #0D2530; border: 1px solid #CFDBDF; border-radius: 8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"></path><circle cx="16" cy="7" r="2"></circle><circle cx="8" cy="17" r="2"></circle></svg></a>
+</div>
+<form role="search" style="position: relative">
+<label for="p-q" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Search messages, chats and people</label>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4C6470" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="position: absolute; left: 14px; top: 13px"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+<input id="p-q" type="search" placeholder="Search messages, chats and people" style="width: 100%; box-sizing: border-box; height: 44px; padding: 0 14px 0 42px; font: inherit; color: #0D2530; background: #EEF3F5; border: 1px solid #CFDBDF; border-radius: 8px">
+</form>
+</header>
+
+<nav aria-label="Chats" style="flex: 1 1 auto">
+<a href="PhoneChat.dc.html" style="display: flex; gap: 12px; padding: 12px 14px; color: inherit; text-decoration: none; border-bottom: 1px solid #E4ECEE">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 10px; font-weight: 600; color: #0B6E7F; background: #D7ECEF">MS</span>
+<span style="flex: 1 1 auto; min-width: 0"><span style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px"><span style="font-weight: 600">Marina Sokolova</span><span style="flex-shrink: 0; font-size: 13px; color: #4C6470">9 Oct</span></span><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; color: #4C6470">Спасибо, что встретил! Чемодан нашёлся</span></span>
+</a>
+<a href="PhoneChat.dc.html" style="display: flex; gap: 12px; padding: 12px 14px; color: inherit; text-decoration: none; border-bottom: 1px solid #E4ECEE">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 10px; font-weight: 600; color: #0B6E7F; background: #D7ECEF">П</span>
+<span style="flex: 1 1 auto; min-width: 0"><span style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px"><span style="font-weight: 600">Походы 2026</span><span style="flex-shrink: 0; font-size: 13px; color: #4C6470">8 Oct</span></span><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; color: #4C6470">Олег: маршрут на субботу в закрепе</span></span>
+</a>
+<a href="PhoneChat.dc.html" style="display: flex; gap: 12px; padding: 12px 14px; color: inherit; text-decoration: none; border-bottom: 1px solid #E4ECEE">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 10px; font-weight: 600; color: #0B6E7F; background: #D7ECEF">F</span>
+<span style="flex: 1 1 auto; min-width: 0"><span style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px"><span style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600">Familia: Marina y Pablo</span><span style="flex-shrink: 0; font-size: 13px; color: #4C6470">2 Oct</span></span><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; color: #4C6470">Pablo: Dile a Marina que las llaves están en el buzón</span></span>
+</a>
+<a href="PhoneChat.dc.html" style="display: flex; gap: 12px; padding: 12px 14px; color: inherit; text-decoration: none; border-bottom: 1px solid #E4ECEE">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 10px; font-weight: 600; color: #0B6E7F; background: #D7ECEF">DW</span>
+<span style="flex: 1 1 auto; min-width: 0"><span style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px"><span style="font-weight: 600">Dan Whitfield</span><span style="flex-shrink: 0; font-size: 13px; color: #4C6470">28 Sep</span></span><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; color: #4C6470">You: Got her. Traffic is bad, we'll be there around eight</span></span>
+</a>
+<a href="PhoneChat.dc.html" style="display: flex; gap: 12px; padding: 12px 14px; color: inherit; text-decoration: none; border-bottom: 1px solid #E4ECEE">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 10px; font-weight: 600; color: #0B6E7F; background: #D7ECEF">CS</span>
+<span style="flex: 1 1 auto; min-width: 0"><span style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px"><span style="font-weight: 600">Flat on Calle Sol</span><span style="flex-shrink: 0; font-size: 13px; color: #4C6470">14 Sep</span></span><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; color: #4C6470">You: Sent the deposit to Marina yesterday, receipt attached</span></span>
+</a>
+<a href="PhoneChat.dc.html" style="display: flex; gap: 12px; padding: 12px 14px; color: inherit; text-decoration: none; border-bottom: 1px solid #E4ECEE">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 10px; font-weight: 600; color: #0B6E7F; background: #D7ECEF">S</span>
+<span style="flex: 1 1 auto; min-width: 0"><span style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px"><span style="font-weight: 600">Saved Messages</span><span style="flex-shrink: 0; font-size: 13px; color: #4C6470">3 Sep</span></span><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; color: #4C6470">Passport renewal: form 11, two photos, old passport</span></span>
+</a>
+<a href="PhoneChat.dc.html" style="display: flex; gap: 12px; padding: 12px 14px; color: inherit; text-decoration: none; border-bottom: 1px solid #E4ECEE">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 10px; font-weight: 600; color: #0B6E7F; background: #D7ECEF">RT</span>
+<span style="flex: 1 1 auto; min-width: 0"><span style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px"><span style="font-weight: 600">Rail Timetable Updates</span><span style="flex-shrink: 0; font-size: 13px; color: #4C6470">21 Aug</span></span><span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; color: #4C6470">Channel. Autumn timetable starts on 1 September</span></span>
+</a>
+</nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Strata, light: chats</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geologica:wght@300..700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0B6E7F}a:hover{color:#084F5C}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-direction: column; background: #EEF3F5; color: #0D2530; font-family: 'Geologica', system-ui, sans-serif; font-weight: 350; font-size: 15px; line-height: 1.45">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 10px 20px; background: #FFFFFF; border-bottom: 1px solid #CFDBDF">
+<a href="Strata.dc.html" style="display: inline-flex; align-items: center; gap: 10px; color: #0D2530; text-decoration: none">
+<span aria-hidden="true" style="display: flex; flex-direction: column; gap: 3px; width: 22px">
+<span style="height: 4px; width: 22px; border-radius: 2px; background: #9CCBD3"></span>
+<span style="height: 4px; width: 16px; border-radius: 2px; background: #3F97A6"></span>
+<span style="height: 4px; width: 22px; border-radius: 2px; background: #0B6E7F"></span>
+<span style="height: 4px; width: 12px; border-radius: 2px; background: #0D2530"></span>
+</span>
+<span style="font-weight: 700; font-size: 21px; letter-spacing: -0.02em">arc5</span>
+</a>
+<a href="Main.dc.html" aria-haspopup="true" aria-label="Source: Personal, Telegram, live. Choose another source" style="display: inline-flex; align-items: center; gap: 10px; min-height: 44px; box-sizing: border-box; padding: 4px 12px 4px 10px; color: #0D2530; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 8px; text-decoration: none">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 30px; height: 30px; margin-left: -5px; border-radius: 7px; background: #E0F2FB"><svg width="18" height="18" viewBox="0 0 24 24" fill="#26A5E4"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"></path></svg></span>
+<span style="display: flex; flex-direction: column; line-height: 1.2"><span style="font-weight: 600">Personal</span><span style="font-size: 12px; color: #4C6470">Telegram</span></span>
+<span role="img" aria-label="Live" title="Live" style="flex-shrink: 0; width: 8px; height: 8px; margin: 0 4px; border-radius: 50%; background: #1E9E6A; box-shadow: 0 0 0 3px #CFEEDD"></span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4C6470" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+</a>
+<form role="search" style="position: relative; flex: 1 1 300px">
+<label for="s-q" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Search messages, chats and people</label>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4C6470" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="position: absolute; left: 14px; top: 13px"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+<input id="s-q" type="search" placeholder="Search messages, chats and people" style="width: 100%; box-sizing: border-box; height: 44px; padding: 0 14px 0 42px; font: inherit; color: #0D2530; background: #EEF3F5; border: 1px solid #CFDBDF; border-radius: 8px">
+</form>
+<button type="button" aria-label="Switch to dark theme" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; color: #0D2530; background: transparent; border: 1px solid #CFDBDF; border-radius: 8px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"></path></svg></button>
+<a href="Settings.dc.html" style="font-weight: 450; color: #0D2530; text-decoration: none">Settings</a>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; flex: 1 1 auto; align-items: stretch">
+
+<aside aria-label="Chats" style="flex: 1 1 300px; max-width: 360px; background: #FFFFFF; border-right: 1px solid #CFDBDF">
+<a href="Strata.dc.html" style="display: flex; gap: 12px; padding: 12px 16px; color: inherit; text-decoration: none; border-bottom: 1px solid #E4ECEE">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 42px; height: 42px; border-radius: 10px; font-weight: 600; color: #0B6E7F; background: #D7ECEF">MS</span>
+<span style="flex: 1 1 auto; min-width: 0">
+<span style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px"><span style="font-weight: 600">Marina Sokolova</span><span style="flex-shrink: 0; font-size: 13px; color: #4C6470">9 Oct</span></span>
+<span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; color: #4C6470">Спасибо, что встретил! Чемодан нашёлся</span>
+</span>
+</a>
+<a href="Strata.dc.html" style="display: flex; gap: 12px; padding: 12px 16px; color: inherit; text-decoration: none; border-bottom: 1px solid #E4ECEE">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 42px; height: 42px; border-radius: 10px; font-weight: 600; color: #0B6E7F; background: #D7ECEF">П</span>
+<span style="flex: 1 1 auto; min-width: 0">
+<span style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px"><span style="font-weight: 600">Походы 2026</span><span style="flex-shrink: 0; font-size: 13px; color: #4C6470">8 Oct</span></span>
+<span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; color: #4C6470">Олег: маршрут на субботу в закрепе</span>
+</span>
+</a>
+<a href="Strata.dc.html" style="display: flex; gap: 12px; padding: 12px 16px; color: inherit; text-decoration: none; border-bottom: 1px solid #E4ECEE">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 42px; height: 42px; border-radius: 10px; font-weight: 600; color: #0B6E7F; background: #D7ECEF">F</span>
+<span style="flex: 1 1 auto; min-width: 0">
+<span style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px"><span style="font-weight: 600">Familia: Marina y Pablo</span><span style="flex-shrink: 0; font-size: 13px; color: #4C6470">2 Oct</span></span>
+<span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; color: #4C6470">Pablo: Dile a Marina que las llaves están en el buzón</span>
+</span>
+</a>
+<a href="Strata.dc.html" aria-current="true" style="display: flex; gap: 12px; padding: 12px 16px; color: #FFFFFF; text-decoration: none; background: #0B6E7F">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 42px; height: 42px; border-radius: 10px; font-weight: 600; color: #0B6E7F; background: #FFFFFF">DW</span>
+<span style="flex: 1 1 auto; min-width: 0">
+<span style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px"><span style="font-weight: 600">Dan Whitfield</span><span style="flex-shrink: 0; font-size: 13px; color: #E1F1F4">28 Sep</span></span>
+<span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; color: #E1F1F4">You: Got her. Traffic is bad, we'll be there around eight</span>
+</span>
+</a>
+<a href="Strata.dc.html" style="display: flex; gap: 12px; padding: 12px 16px; color: inherit; text-decoration: none; border-bottom: 1px solid #E4ECEE">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 42px; height: 42px; border-radius: 10px; font-weight: 600; color: #0B6E7F; background: #D7ECEF">CS</span>
+<span style="flex: 1 1 auto; min-width: 0">
+<span style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px"><span style="font-weight: 600">Flat on Calle Sol</span><span style="flex-shrink: 0; font-size: 13px; color: #4C6470">14 Sep</span></span>
+<span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; color: #4C6470">You: Sent the deposit to Marina yesterday, receipt attached</span>
+</span>
+</a>
+<a href="Strata.dc.html" style="display: flex; gap: 12px; padding: 12px 16px; color: inherit; text-decoration: none; border-bottom: 1px solid #E4ECEE">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 42px; height: 42px; border-radius: 10px; font-weight: 600; color: #0B6E7F; background: #D7ECEF">S</span>
+<span style="flex: 1 1 auto; min-width: 0">
+<span style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px"><span style="font-weight: 600">Saved Messages</span><span style="flex-shrink: 0; font-size: 13px; color: #4C6470">3 Sep</span></span>
+<span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; color: #4C6470">Passport renewal: form 11, two photos, old passport</span>
+</span>
+</a>
+<a href="Strata.dc.html" style="display: flex; gap: 12px; padding: 12px 16px; color: inherit; text-decoration: none">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 42px; height: 42px; border-radius: 10px; font-weight: 600; color: #0B6E7F; background: #D7ECEF">RT</span>
+<span style="flex: 1 1 auto; min-width: 0">
+<span style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px"><span style="font-weight: 600">Rail Timetable Updates</span><span style="flex-shrink: 0; font-size: 13px; color: #4C6470">21 Aug</span></span>
+<span style="display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; color: #4C6470">Channel. Autumn timetable starts on 1 September</span>
+</span>
+</a>
+</aside>
+
+<section aria-label="Conversation" style="display: flex; flex-direction: column; flex: 999 1 560px; min-width: 0">
+<div style="padding: 12px 24px; background: #FFFFFF; border-bottom: 1px solid #CFDBDF">
+<h1 style="margin: 0; font-weight: 650; font-size: 21px; line-height: 1.2; letter-spacing: -0.01em">Dan Whitfield</h1>
+<p style="margin: 2px 0 0; font-size: 14px; color: #4C6470">Private chat on Telegram, 942 messages since March 2021</p>
+</div>
+
+<div style="display: flex; flex: 1 1 auto; align-items: stretch">
+
+<div style="display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-width: 0; padding: 18px 24px 32px">
+
+<div style="display: flex; align-items: center; gap: 12px; margin: 2px 0 4px"><span style="font-size: 13.5px; font-weight: 600; color: #4C6470">Sunday, 27 September 2026</span><span aria-hidden="true" style="flex: 1 1 auto; height: 1px; background: #CFDBDF"></span></div>
+
+<div style="align-self: flex-end; max-width: min(520px, 86%); padding: 9px 13px 7px; background: #D7ECEF; border: 1px solid #B9DADF; border-radius: 8px">
+<p style="margin: 0; font-size: 15.5px; line-height: 1.5">Are we still on for Monday? I can bring the projector.</p>
+<p style="margin: 3px 0 0; text-align: right; font-size: 12.5px; color: #3A525D">18:22</p>
+</div>
+
+<div style="align-self: flex-start; max-width: min(520px, 86%); padding: 9px 13px 7px; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 8px">
+<p style="margin: 0; font-size: 15.5px; line-height: 1.5">Yes. Room 4 from ten, the old one with the broken blinds.</p>
+<p style="margin: 3px 0 0; font-size: 12.5px; color: #4C6470">18:40, edited at 18:44. <a href="Strata.dc.html" style="font-weight: 600">Show the earlier version</a></p>
+</div>
+
+<div style="align-self: flex-start; max-width: min(520px, 86%); padding: 6px; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 8px">
+<div style="display: flex; align-items: center; justify-content: center; width: 300px; max-width: 100%; height: 160px; box-sizing: border-box; padding: 12px; text-align: center; font-size: 14px; color: #3A525D; background: #E4ECEE; border-radius: 4px">[Photo: floor-plan.jpg]</div>
+<p style="margin: 5px 7px 1px; font-size: 12.5px; color: #4C6470">18:41</p>
+</div>
+
+<div style="display: flex; align-items: center; gap: 12px; margin: 12px 0 4px"><span style="font-size: 13.5px; font-weight: 600; color: #4C6470">Monday, 28 September 2026</span><span aria-hidden="true" style="flex: 1 1 auto; height: 1px; background: #CFDBDF"></span></div>
+
+<div style="align-self: flex-start; max-width: min(520px, 86%); padding: 9px 13px 9px; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 8px">
+<p style="margin: 0; font-size: 15.5px; line-height: 1.5">Marina's flight lands at 18:40. Can you pick her up, or should I book a taxi?</p>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 6px">
+<span style="font-size: 12.5px; color: #4C6470">10:02</span>
+<span style="padding: 2px 8px; font-size: 12.5px; font-weight: 600; color: #7A4700; background: #FBEBCB; border-radius: 4px">Deleted at source on 29 Sep</span>
+</div>
+</div>
+
+<div style="align-self: flex-end; max-width: min(520px, 86%); padding: 9px 13px 7px; background: #D7ECEF; border: 1px solid #B9DADF; border-radius: 8px">
+<p style="margin: 0; font-size: 15.5px; line-height: 1.5">I'll get her. Terminal 1?</p>
+<p style="margin: 3px 0 0; text-align: right; font-size: 12.5px; color: #3A525D">10:05</p>
+</div>
+
+<div style="align-self: flex-start; display: flex; align-items: center; gap: 12px; width: 300px; max-width: 86%; padding: 7px 13px 7px 7px; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 8px">
+<button type="button" aria-label="Play voice note" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; color: #FFFFFF; background: #0B6E7F; border: 0; border-radius: 6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5l12 7-12 7z"></path></svg></button>
+<span style="flex: 1 1 auto">Voice note</span>
+<span style="font-size: 13px; color: #4C6470; font-variant-numeric: tabular-nums">0:42, 10:07</span>
+</div>
+
+<div style="align-self: flex-start; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; max-width: min(520px, 86%); padding: 9px 13px; background: #FFFFFF; border: 1px solid #CFDBDF; border-radius: 8px">
+<div style="flex: 1 1 220px">
+<div style="font-weight: 600; overflow-wrap: anywhere">arrivals-walkthrough.mp4</div>
+<div style="font-size: 13.5px; color: #4C6470">312 MB video, not downloaded: over the 50 MB limit</div>
+</div>
+<button type="button" style="height: 44px; padding: 0 16px; font: inherit; font-weight: 600; color: #FFFFFF; background: #0B6E7F; border: 0; border-radius: 6px">Fetch now</button>
+</div>
+
+<div style="align-self: flex-end; max-width: min(520px, 86%); padding: 9px 13px 7px; background: #D7ECEF; border: 1px solid #B9DADF; border-radius: 8px">
+<p style="margin: 0; font-size: 15.5px; line-height: 1.5">Got her. Traffic is bad, we'll be there around eight.</p>
+<p style="margin: 3px 0 0; text-align: right; font-size: 12.5px; color: #3A525D">19:03</p>
+</div>
+
+</div>
+
+<nav aria-label="Jump to a year" style="display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; width: 76px; box-sizing: border-box; padding: 16px 12px; background: #FFFFFF; border-left: 1px solid #CFDBDF">
+<a href="Strata.dc.html" style="display: flex; flex-direction: column; gap: 3px; color: #0D2530; text-decoration: none">
+<span style="font-size: 13px; font-weight: 700">2026</span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #E0A93B"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #3F97A6"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #9CCBD3"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #0B6E7F"></span>
+</a>
+<a href="Strata.dc.html" style="display: flex; flex-direction: column; gap: 3px; color: #4C6470; text-decoration: none">
+<span style="font-size: 13px; font-weight: 500">2025</span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #9CCBD3"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #0B6E7F"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #3F97A6"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #D7ECEF"></span>
+</a>
+<a href="Strata.dc.html" style="display: flex; flex-direction: column; gap: 3px; color: #4C6470; text-decoration: none">
+<span style="font-size: 13px; font-weight: 500">2024</span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #3F97A6"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #3F97A6"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #0B6E7F"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #9CCBD3"></span>
+</a>
+<a href="Strata.dc.html" style="display: flex; flex-direction: column; gap: 3px; color: #4C6470; text-decoration: none">
+<span style="font-size: 13px; font-weight: 500">2023</span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #D7ECEF"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #9CCBD3"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #D7ECEF"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #3F97A6"></span>
+</a>
+<a href="Strata.dc.html" style="display: flex; flex-direction: column; gap: 3px; color: #4C6470; text-decoration: none">
+<span style="font-size: 13px; font-weight: 500">2022</span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #9CCBD3"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #D7ECEF"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #E4ECEE"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #D7ECEF"></span>
+</a>
+<a href="Strata.dc.html" style="display: flex; flex-direction: column; gap: 3px; color: #4C6470; text-decoration: none">
+<span style="font-size: 13px; font-weight: 500">2021</span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #D7ECEF"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #9CCBD3"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #3F97A6"></span>
+<span aria-hidden="true" style="height: 9px; border-radius: 2px; background: #E4ECEE"></span>
+</a>
+</nav>
+
+</div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
