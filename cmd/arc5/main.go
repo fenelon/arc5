@@ -131,7 +131,12 @@ func serve(ctx context.Context, cfg config.Config, ready func(addr string)) erro
 		return err
 	}
 
-	srv := &http.Server{Handler: web.NewHandler(), ReadHeaderTimeout: 10 * time.Second}
+	site, err := web.New(web.Deps{Store: store, Runner: runner, Registry: connector.Default})
+	if err != nil {
+		ln.Close()
+		return err
+	}
+	srv := &http.Server{Handler: site, ReadHeaderTimeout: 10 * time.Second}
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(ln) }()
 	log.Printf("arc5 listening on http://%s, data in %s", ln.Addr(), cfg.DataDir)

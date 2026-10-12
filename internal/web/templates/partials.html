@@ -1,0 +1,37 @@
+{{define "head"}}<!doctype html>
+<html lang="en"{{if .Theme}} data-theme="{{.Theme}}"{{end}}>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} - arc5</title>
+<link rel="stylesheet" href="{{asset "app.css"}}">
+<script type="module" src="{{asset "js/app.js"}}"></script>
+</head>
+{{end}}
+
+{{define "brand"}}<a class="brand" href="/"><span class="brand__mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span><span class="brand__name">arc5</span></a>{{end}}
+
+{{define "logo"}}<span class="logo logo--{{.}}" aria-hidden="true">{{if eq . "telegram"}}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>{{else if eq . "whatsapp"}}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>{{else if eq . "email"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>{{else if eq . "all"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 16l9 5 9-5"/></svg>{{else}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H10l-5 4v-4H4z"/></svg>{{end}}</span>{{end}}
+
+{{define "state"}}{{if eq .State "live"}}<span class="state state--live" role="img" aria-label="{{.StateLabel}}" title="{{.StateLabel}}"></span>{{else if eq .State "needs-login"}}<span class="state state--lock" role="img" aria-label="{{.StateLabel}}" title="{{.StateLabel}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></span>{{else if eq .State "catching-up"}}<span class="state state--sync" role="img" aria-label="{{.StateLabel}}" title="{{.StateLabel}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 00-14.5-4.5L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0014.5 4.5L20 16"/><path d="M20 20v-4h-4"/></svg></span>{{else if .State}}<span class="state state--off" role="img" aria-label="{{.StateLabel}}" title="{{.StateLabel}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3z"/><path d="M12 10v4"/><path d="M12 17.5v.5"/></svg></span>{{end}}{{end}}
+
+{{define "tile"}}<a class="tile{{if .Current}} tile--current{{end}}" href="{{.Href}}"{{if .Current}} aria-current="true"{{end}}>{{template "logo" .Logo}}<span class="tile__text"><span class="tile__name">{{.Name}}</span><span class="tile__sub">{{.Service}}</span></span>{{template "state" .}}</a>{{end}}
+
+{{define "picker"}}<details class="picker" data-controller="picker">
+<summary class="picker__button" aria-label="Source: {{.Current.Name}}. Choose another source">{{template "logo" .Current.Logo}}<span class="tile__text"><span class="tile__name">{{.Current.Name}}</span><span class="tile__sub">{{.Current.Service}}</span></span>{{template "state" .Current}}<svg class="picker__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+<nav class="picker__panel" aria-label="Sources">
+{{range .Groups}}<h2 class="picker__heading">{{.Title}}</h2>
+<div class="picker__grid">{{range .Tiles}}{{template "tile" .}}{{end}}</div>
+{{end}}<div class="picker__foot"><a href="/sources">Manage sources</a></div>
+</nav>
+</details>{{end}}
+
+{{define "topbar"}}<header class="topbar">
+{{template "brand"}}
+{{if .Picker}}{{template "picker" .Picker}}{{end}}
+<span class="topbar__space"></span>
+<button class="icon-button" type="button" data-controller="theme" data-action="theme#toggle" aria-label="Switch between the light and dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/></svg></button>
+<form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link-button" type="submit">Sign out</button></form>
+</header>{{end}}
+
+{{define "banner"}}{{if .Alert}}<div class="banner" role="alert"><span><strong>{{.Alert.Name}} is not archiving.</strong> {{.Alert.Detail}}</span><a class="button button--warn" href="/sources">Open sources</a></div>{{end}}{{end}}
