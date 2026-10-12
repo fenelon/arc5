@@ -18,17 +18,23 @@ import (
 	"github.com/fenelon/arc5/internal/archive"
 	"github.com/fenelon/arc5/internal/config"
 	"github.com/fenelon/arc5/internal/connector"
+	"github.com/fenelon/arc5/internal/connector/demo"
 	"github.com/fenelon/arc5/internal/search"
 	"github.com/fenelon/arc5/internal/web"
 )
 
 const usage = `usage:
   arc5 serve   [--listen address] [--data folder]
-  arc5 reindex [--data folder] [--languages en,ru,es]`
+  arc5 reindex [--data folder] [--languages en,ru,es]
+  arc5 demo    [--data folder]`
 
 // languagesKey is the setting that holds the languages search stems, as
 // comma-separated codes.
 const languagesKey = "search_languages"
+
+// The demo connector is registered once per process, so the sample archive's
+// source shows as live.
+func init() { demo.Register(connector.Default) }
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -58,6 +64,12 @@ func run(ctx context.Context, args []string, getenv func(string) string, ready f
 			return fmt.Errorf("%w\n%s", err, usage)
 		}
 		return reindex(ctx, cfg)
+	case "demo":
+		cfg, err := config.ParseDemo(args[1:], getenv)
+		if err != nil {
+			return fmt.Errorf("%w\n%s", err, usage)
+		}
+		return seedDemo(cfg)
 	default:
 		return fmt.Errorf("unknown command %q\n%s", args[0], usage)
 	}
@@ -131,7 +143,7 @@ func serve(ctx context.Context, cfg config.Config, ready func(addr string)) erro
 		return err
 	}
 
-	site, err := web.New(web.Deps{Store: store, Runner: runner, Registry: connector.Default})
+	site, err := web.New(web.Deps{Store: store, Runner: runner, Registry: connector.Default, EnvPassword: cfg.Password})
 	if err != nil {
 		ln.Close()
 		return err
@@ -188,5 +200,31 @@ func reindex(ctx context.Context, cfg config.Reindex) error {
 		languages = "none"
 	}
 	fmt.Printf("indexed %d messages; word forms for: %s\n", indexed, languages)
+	return nil
+}
+
+// seedDemo writes the sample archive into an empty data folder.
+func seedDemo(cfg config.Demo) error {
+	store, err := archive.Open(cfg.DataDir)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	// With the analyzer set, the sample messages are indexed as they are written.
+	analyzer, err := loadAnalyzer(store)
+	if err != nil {
+		return err
+	}
+	store.SetAnalyzer(analyzer)
+
+	seeded, err := demo.Seed(store)
+	if err != nil {
+		return err
+	}
+	if !seeded {
+		return fmt.Errorf("%s already has sources; the demo archive is only written into an empty data folder", cfg.DataDir)
+	}
+	fmt.Printf("demo archive written to %s; start it with: arc5 serve --data %s\n", cfg.DataDir, cfg.DataDir)
 	return nil
 }
