@@ -91,6 +91,8 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /s/{source}", s.signedIn(s.sourceView))
 	s.mux.Handle("GET /s/{source}/c/{chat}", s.signedIn(s.conversationView))
 	s.mux.Handle("GET /sources", s.signedIn(s.sourcesList))
+	s.mux.Handle("GET /media/{id}", s.signedIn(s.serveMedia))
+	s.mux.Handle("POST /media/{id}/fetch", s.signedIn(s.fetchMedia))
 }
 
 // health is unauthenticated and deliberately says nothing about accounts.
