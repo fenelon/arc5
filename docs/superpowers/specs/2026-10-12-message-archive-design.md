@@ -75,6 +75,7 @@ One Go binary. One data folder containing `arc5.db` (SQLite, WAL mode) and
 
 ```
 cmd/arc5/              main, subcommands: serve, backup, reindex
+internal/model/        event types shared by archive and connectors
 internal/archive/      store, migrations, media store
 internal/search/       analyze, index, query, snippet
 internal/connector/    interfaces, registry, runner
@@ -115,7 +116,8 @@ type Connector interface {
 type Sink interface {
     UpsertChat(Chat) error
     UpsertSender(Sender) error
-    UpsertMessage(Message) error            // new or edited; idempotent
+    // New or edited; idempotent. Returns the attachments still to download.
+    UpsertMessage(Message) ([]AttachmentRef, error)
     MarkDeleted(chatSourceID string, messageSourceIDs []string) error
     LookupChats(messageSourceID string, kinds []ChatKind) ([]string, error)
     PutMedia(ref AttachmentRef, r io.Reader) error
@@ -156,8 +158,10 @@ restarts that connector. Checkpoints and gap recovery make a restart lossless,
 so connectors need no live-reconfiguration code.
 
 "Fetch now" and "retry" in the interface set the attachment back to `pending`
-and deliver its reference on `RequestedMedia`; the connector downloads it
-through its live queue regardless of the size cap.
+with `requested = 1` and deliver its reference on `RequestedMedia`; the
+connector downloads it through its live queue regardless of the size cap. The
+flag is stored, so a request made while the connector is down is delivered
+when it next starts.
 
 `LookupChats` exists because some sources report deletions without naming the
 chat (see Telegram, section 6). It is a read helper, not a storage leak: the
@@ -187,7 +191,7 @@ messages(id, chat_id, source_id, sender_id, kind, sent_at, text,
 message_versions(id, message_id, text, replaced_at)
 
 attachments(id, message_id, position, kind, file_name, mime_type, size,
-            sha256, status, reason, ephemeral)
+            sha256, status, reason, ephemeral, requested)
             kind:   photo | video | audio | voice | document | sticker | other
             status: pending | stored | skipped | failed | unavailable
 
@@ -204,6 +208,8 @@ Rules the archive enforces:
   may overlap, and a connector may replay after a crash.
 - **Edits keep history.** If an upsert carries different text from the stored
   message, the old text is written to `message_versions` and `edited_at` is set.
+  An upsert whose edit time is older than the stored one is ignored, so a
+  replayed original never reverts a later edit.
 - **Deletions are marks.** `MarkDeleted` sets `deleted_at`. No row or file is
   removed because the source removed it.
 - **Raw payload.** `raw` holds the source's original message object as
