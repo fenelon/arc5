@@ -9,13 +9,16 @@ session.
 |---|---|
 | 1. Archive core, connector model, runner | Done, merged. Plan: `plans/2026-10-12-arc5-core.md` |
 | 2. Search engine (analyzer, FTS index, names) | Done, merged. Plan: `plans/2026-10-12-arc5-search.md` |
-| 3a. Web shell and chats view | **Planned, not started.** Plan: `plans/2026-10-13-arc5-web-shell.md` |
+| 3a. Web shell and chats view | Done, merged. Plan: `plans/2026-10-13-arc5-web-shell.md` |
 | 3b. Search in the interface, Sources page with setup flows, Settings | Not planned yet |
 | 4. Telegram connector | Not planned yet; two decisions open (below) |
 | 5. Alerts, `backup`, Docker image, view-once option | Not planned yet |
 | Later | Email connector with the mail layout, then WhatsApp |
 
 `master` is pushed and green: `go vet ./... && go test -race ./...`.
+
+To look at the interface: `arc5 demo --data <folder>`, then
+`ARC5_PASSWORD=<pw> arc5 serve --data <folder>`.
 
 The design spec is `specs/2026-10-12-message-archive-design.md`. Section 8
 describes the approved interface.
@@ -71,8 +74,19 @@ countdown for the other side. The connector must never call that method.
 - `« »` are not treated as phrase quotes; snippets can cut inside a grapheme.
 - Nothing sweeps `media/tmp` after a crash.
 - `arc5 serve --help` exits with an error code.
+- From the 3a review (listed in the plan's "Post-review changes"): the global
+  login throttle lets anyone keep the owner out with a wrong password every
+  few minutes; `localPath` lets a tab through; `verifyPassword` trusts the
+  cost numbers of a stored hash; two simultaneous first-run setups can both
+  succeed; a media file missing from disk gives 500; "Edited at" has no date;
+  lazy images can push the newest message out of view; "Fetch now" never
+  completes in the demo; the year rail costs about 100 ms per page on a
+  200,000-message chat.
+- No `ReadTimeout`/`IdleTimeout` on the HTTP server.
+- Removing `ARC5_PASSWORD` makes an earlier password set in the browser active
+  again (every session is cleared).
 
-## Notes for plan 3b
+## Notes for plan 3b (now folded into the 3b plan)
 
 - The top bar needs the search box and a Settings link (3a has "Sign out"
   only).
