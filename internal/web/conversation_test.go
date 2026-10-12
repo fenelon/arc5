@@ -240,3 +240,37 @@ func TestYearRail(t *testing.T) {
 		t.Error("the rail does not mark 2024 as the year being read")
 	}
 }
+
+// The page opens where the reader is going: at the newest message, at the
+// top of a page of later messages or of a date, or at the message asked for.
+func TestConversationSaysWhereToScroll(t *testing.T) {
+	s, _, path, ids := talk(t, 70)
+	for query, want := range map[string]string{
+		"":                                 "end",
+		fmt.Sprintf("?before=%d", ids[10]): "end",
+		fmt.Sprintf("?after=%d", ids[9]):   "start",
+		"?date=2026-09-28":                 "start",
+		fmt.Sprintf("?at=%d", ids[34]):     fmt.Sprintf("m%d", ids[34]),
+		"?at=987654":                       "end",
+	} {
+		body := s.page(path + query)
+		has(t, body, fmt.Sprintf(`<div class="messages" data-controller="scroll" data-scroll-to-value="%s">`, want))
+	}
+}
+
+// On a phone the open chat is a screen of its own, as in the approved mockup:
+// the page says so, and the year picker jumps as soon as a year is chosen.
+func TestConversationPageIsItsOwnScreenOnPhones(t *testing.T) {
+	s, acc, path, _ := talk(t, 3)
+	has(t, s.page(path), `<body class="app app--panes app--open">`,
+		`<form class="jump only-phone" method="get" data-controller="jump">`,
+		`data-action="jump#go"`, `data-jump-target="button"`)
+	list := s.page(fmt.Sprintf("/s/%d", acc))
+	has(t, list, `<body class="app app--panes">`)
+	if rec := s.get(s.srv.asset("js/scroll_controller.js")); rec.Code != http.StatusOK {
+		t.Errorf("scroll_controller.js: %d", rec.Code)
+	}
+	if rec := s.get(s.srv.asset("js/jump_controller.js")); rec.Code != http.StatusOK {
+		t.Errorf("jump_controller.js: %d", rec.Code)
+	}
+}

@@ -21,6 +21,7 @@ type Conversation struct {
 	SelfHref    string // this page, for forms that come back to it
 	OlderHref   string
 	NewerHref   string
+	ScrollTo    string // where the page opens: "end", "start" or a message's anchor
 	Days        []Day
 	Years       []RailYear
 	YearOptions []YearOption
@@ -259,14 +260,15 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 	// reading is the moment the rail marks: the end of the page, unless the
 	// page was opened at a date, a message, or just after one.
 	reading := s.deps.Now()
+	conv.ScrollTo = "end"
 	if len(window.Messages) > 0 {
 		reading = window.Messages[len(window.Messages)-1].SentAt
 		if !anchor.From.IsZero() || anchor.After != 0 {
-			reading = window.Messages[0].SentAt
+			reading, conv.ScrollTo = window.Messages[0].SentAt, "start"
 		}
 		for _, m := range window.Messages {
 			if m.ID == target {
-				reading = m.SentAt
+				reading, conv.ScrollTo = m.SentAt, fmt.Sprintf("m%d", m.ID)
 			}
 		}
 		if window.HasOlder {

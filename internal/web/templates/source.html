@@ -1,5 +1,5 @@
 {{define "source"}}{{template "head" .}}
-<body class="app">
+<body class="app app--panes{{if .Conversation}} app--open{{end}}">
 {{template "topbar" .}}
 {{template "banner" .}}
 <div class="shell{{if .Conversation}} shell--open{{end}}">

@@ -2,10 +2,10 @@
 <header class="conv-head">
 <a class="back only-phone" href="{{.BackHref}}" aria-label="Back to chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
 <div class="conv-head__text"><h1>{{.Title}}</h1><p>{{.Subtitle}}</p></div>
-{{if .YearOptions}}<form class="jump only-phone" method="get"><label class="visually-hidden" for="jump-year">Jump to a year</label><select id="jump-year" name="date">{{range .YearOptions}}<option value="{{.Value}}"{{if .Current}} selected{{end}}>{{.Label}}</option>{{end}}</select><button class="button button--quiet" type="submit">Go</button></form>{{end}}
+{{if .YearOptions}}<form class="jump only-phone" method="get" data-controller="jump"><label class="visually-hidden" for="jump-year">Jump to a year</label><select id="jump-year" name="date" data-action="jump#go">{{range .YearOptions}}<option value="{{.Value}}"{{if .Current}} selected{{end}}>{{.Label}}</option>{{end}}</select><button class="button button--quiet" type="submit" data-jump-target="button">Go</button></form>{{end}}
 </header>
 <div class="conv-body">
-<div class="messages">
+<div class="messages" data-controller="scroll" data-scroll-to-value="{{.ScrollTo}}">
 {{if .OlderHref}}<a class="more" href="{{.OlderHref}}">Earlier messages</a>{{end}}
 {{range .Days}}<h2 class="day"><span>{{.Label}}</span></h2>
 {{range .Messages}}{{template "message" (dict "M" . "CSRF" $.CSRF "Back" $.Conversation.SelfHref)}}
