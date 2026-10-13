@@ -168,3 +168,45 @@ plus `dial(ctx, creds, storage, handler) (api, func(), error)` running a gotd cl
 ## After the plan
 
 Add "Post-review changes" and update STATUS: milestone 4 done but unverified against the real service; the manual test joins milestone 5. Then the email spec ("move towards mail integration").
+
+## Post-review changes
+
+Executed on branch `telegram`, one commit per task. The changes made beyond
+the tasks as written:
+
+**During the tasks** (each in the ledger as a ruling):
+- The sink passes the archive's `ErrNotFound` through instead of treating
+  it as a storage failure (Task 2).
+- Avatars are served by content hash at `/avatars/{sha}`, and shown only
+  where the mockups show pictures: the chat list and search (Task 3).
+- A source refuses a login as a different Telegram account than the one it
+  archives (Task 7).
+- The connector registers through `telegram.Register`, like the demo, and
+  its settings add a "Since" date (Task 8).
+- gotd saves the update position even when the handler failed; the update
+  storage now refuses position changes after a storage failure, so the
+  update is asked for again (Task 10).
+- From looking at the demo: replaced media is dated by the edit, and a login
+  step's secret field no longer says "Unchanged" (Task 12).
+
+**From the whole-branch review.** One critical and seven important
+findings, plus two minors re-graded as important; each fixed test-first in
+its own commit:
+
+| Finding | Change | Test |
+|---|---|---|
+| The catch-up after a long disconnection fetched from the newest stored message when it ran, so a live message arriving first hid the gap; the queue was lost on restart | Gap markers in State, written in gotd's too-long callback, filled from the marker, removed after storing, resumed at start, retried after transient errors | `TestCatchUpSurvivesLiveMessagesAndRestarts` |
+| One chat Telegram refuses stopped the run, every run | Per-chat refusals (4xx other than flood waits and dead sessions) skip the chat | `TestBackfillSkipsAChatTelegramRefuses` |
+| A short age limit marked quiet chats as fully fetched | The checkpoint records the limit that stopped it | `TestALongerLimitReachesQuietChats` |
+| A full disk during a download marked files failed | The archive's error is reported before the download's | `TestAFullDiskStopsTheDownloads` |
+| Pending downloads were forgotten on restart | `PendingMedia` on the store and the sink; requeued at start | `TestARestartRequeuesWaitingFiles` |
+| A late download could land on the file an edit put in its place | `AttachmentRef.SourceID`; stale refs refused and dropped | `TestAStaleRefCannotTouchTheReplacement`, `TestAStaleDownloadIsDropped` |
+| An older copy of a message reverted an edited photo | Older copies replace no attachments | `TestAnOlderCopyDoesNotRevertAnEditedPhoto` |
+| Flood waits on the chat list were not obeyed | `Dialogs` and `Self` wait them out | `TestTheChatListObeysFloodWaits` |
+| The chat list stopped after a page ending on a channel the owner left (re-graded) | Forbidden channels keep their access hash | `TestDialogsPageEndingOnAForbiddenChannel` |
+| A refused login as another account left that account's session (re-graded) | Logged out and cleared | `TestLoginRefusesAnotherAccount` |
+
+Deferred minors: the `selfID` race before the first `Self`; picture changes
+noticed on the next run; the reason given for requested self-destructing
+media when the setting is off; an unreadable "Since" date meaning all
+history.
