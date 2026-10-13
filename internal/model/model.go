@@ -120,6 +120,39 @@ type AttachmentRef struct {
 	SourceID string
 }
 
+// FolderRole is what a mail folder is for, from its SPECIAL-USE attribute or
+// its name.
+type FolderRole string
+
+const (
+	FolderInbox     FolderRole = "inbox"
+	FolderSent      FolderRole = "sent"
+	FolderAll       FolderRole = "all" // every message once, as Gmail's All Mail
+	FolderDrafts    FolderRole = "drafts"
+	FolderJunk      FolderRole = "junk"
+	FolderTrash     FolderRole = "trash"
+	FolderFlagged   FolderRole = "flagged"
+	FolderImportant FolderRole = "important"
+	FolderOther     FolderRole = "other"
+)
+
+func (r FolderRole) Valid() bool {
+	switch r {
+	case FolderInbox, FolderSent, FolderAll, FolderDrafts, FolderJunk, FolderTrash, FolderFlagged, FolderImportant, FolderOther:
+		return true
+	}
+	return false
+}
+
+// Folder is a mailbox's folder. ArchiveByDefault applies when the folder is
+// first seen; after that the owner's choice stands.
+type Folder struct {
+	SourceID         string
+	Name             string
+	Role             FolderRole
+	ArchiveByDefault bool
+}
+
 // AddressRole is the header a mail address came from.
 type AddressRole string
 
