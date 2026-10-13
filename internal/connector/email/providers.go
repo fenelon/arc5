@@ -1,6 +1,9 @@
 package email
 
-import "strings"
+import (
+	"net"
+	"strings"
+)
 
 // provider is what arc5 knows of a mail service, found by the address's
 // domain: its IMAP server and what its login needs.
@@ -67,4 +70,36 @@ func providerFor(address string) provider {
 		return p
 	}
 	return provider{host: "imap." + domain, port: 993, help: "The password of this mailbox, or an app password if your provider asks for one.", refused: genericRefused}
+}
+
+// mailHosts are the services that receive a domain's mail, by the end of an
+// MX host's name. A custom domain on Google Workspace, Microsoft 365, Fastmail
+// or iCloud has a provider arc5 knows, found this way.
+var mailHosts = []struct {
+	suffix string
+	p      provider
+}{
+	{".google.com.", gmail}, {".googlemail.com.", gmail},
+	{".mail.protection.outlook.com.", microsoft},
+	{".messagingengine.com.", providers["fastmail.com"]},
+	{".mail.icloud.com.", providers["icloud.com"]},
+	{".yandex.net.", providers["yandex.com"]}, {".yandex.ru.", providers["yandex.com"]},
+	{".zoho.com.", providers["zoho.com"]},
+}
+
+// providerByMail is the provider that receives mail at the given MX hosts,
+// or the zero provider when arc5 does not know it.
+func providerByMail(mx []*net.MX) provider {
+	for _, m := range mx {
+		host := strings.ToLower(m.Host)
+		if !strings.HasSuffix(host, ".") {
+			host += "."
+		}
+		for _, h := range mailHosts {
+			if strings.HasSuffix("."+host, h.suffix) {
+				return h.p
+			}
+		}
+	}
+	return provider{}
 }

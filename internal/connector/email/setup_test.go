@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"strconv"
 	"strings"
 	"testing"
@@ -193,5 +194,60 @@ func TestRegister(t *testing.T) {
 		if !names[want] {
 			t.Errorf("no %q setting", want)
 		}
+	}
+}
+
+func TestProviderByMail(t *testing.T) {
+	for want, hosts := range map[string][]string{
+		"Gmail":     {"aspmx.l.google.com.", "alt1.aspmx.l.google.com."},
+		"Gmail ":    {"smtp.google.com."},
+		"Microsoft": {"fenelon-ru.mail.protection.outlook.com."},
+		"Fastmail":  {"in1-smtp.messagingengine.com."},
+		"iCloud":    {"mx01.mail.icloud.com."},
+		"Yandex":    {"mx.yandex.net."},
+		"Zoho":      {"mx.zoho.com."},
+		"":          {"mx.example.org.", "google.com.evil.example."},
+	} {
+		var mx []*net.MX
+		for _, h := range hosts {
+			mx = append(mx, &net.MX{Host: h})
+		}
+		if got := providerByMail(mx).name; got != strings.TrimSpace(want) {
+			t.Errorf("%v: %q, want %q", hosts, got, want)
+		}
+	}
+}
+
+// A domain arc5 does not know is looked up: one whose mail Google handles
+// (Google Workspace) is set up as Gmail; one Microsoft handles is refused.
+func TestSetupFindsWhoHandlesAnUnknownDomain(t *testing.T) {
+	srv := newFakeServer("INBOX")
+	mx := map[string]string{"workspace.example": "aspmx.l.google.com.", "corp.example": "corp-example.mail.protection.outlook.com."}
+	c := &Connector{dial: srv.dial, lookupMX: func(ctx context.Context, domain string) ([]*net.MX, error) {
+		if h, ok := mx[domain]; ok {
+			return []*net.MX{{Host: h}}, nil
+		}
+		return nil, errors.New("no such host")
+	}}
+	ctx := context.Background()
+
+	flow := c.Setup(newMemState())
+	flow.Next(ctx, nil)
+	st, err := flow.Next(ctx, map[string]string{"address": "me@workspace.example"})
+	if err != nil || fields(st)["host"].Default != "imap.gmail.com" || !strings.Contains(st.Help, "apppasswords") {
+		t.Fatalf("a Workspace domain: host %q, help %q, %v", fields(st)["host"].Default, st.Help, err)
+	}
+
+	flow = c.Setup(newMemState())
+	flow.Next(ctx, nil)
+	if _, err := flow.Next(ctx, map[string]string{"address": "me@corp.example"}); err == nil || !strings.Contains(err.Error(), "Microsoft") {
+		t.Errorf("a Microsoft 365 domain: %v", err)
+	}
+
+	flow = c.Setup(newMemState())
+	flow.Next(ctx, nil)
+	st, err = flow.Next(ctx, map[string]string{"address": "me@unknown.example"})
+	if err != nil || fields(st)["host"].Default != "imap.unknown.example" {
+		t.Errorf("a domain that cannot be looked up: %q, %v", fields(st)["host"].Default, err)
 	}
 }
