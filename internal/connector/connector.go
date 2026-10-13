@@ -56,6 +56,30 @@ type Sink interface {
 	PutAvatar(model.AvatarRef, io.Reader) error
 }
 
+// MailSink is the Sink of a mail connector: the runner's sink implements it,
+// and a mail connector asserts it. Threads are chats of kind ChatThread;
+// folders and which messages each holds are recorded here.
+type MailSink interface {
+	Sink
+	// UpsertFolder records a folder; ArchiveByDefault applies the first time.
+	UpsertFolder(model.Folder) error
+	// FolderArchived reports whether the owner archives a folder.
+	FolderArchived(folderSourceID string) (bool, error)
+	// FileInFolder records that a stored message is in a folder under a UID.
+	FileInFolder(folderSourceID string, uid uint32, chatSourceID, messageSourceID string) error
+	// FolderUIDs lists the UIDs of the messages filed in a folder and still there.
+	FolderUIDs(folderSourceID string) ([]uint32, error)
+	// LeaveFolder records that messages left a folder; a message gone from
+	// every folder is deleted at source.
+	LeaveFolder(folderSourceID string, uids []uint32) error
+	// ResetFolder forgets a folder's UIDs after the server renumbered it.
+	ResetFolder(folderSourceID string) error
+	// SetAccountAddress records the mailbox's own address.
+	SetAccountAddress(address string) error
+	// Original opens a stored message as received.
+	Original(chatSourceID, messageSourceID string) (io.ReadCloser, error)
+}
+
 // State is a connector's private per-account key-value store, for sessions and checkpoints.
 type State interface {
 	// Get returns nil when the key is unset.

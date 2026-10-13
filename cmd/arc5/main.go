@@ -33,6 +33,7 @@ const usage = `usage:
 // sample archive's source shows as live; it is never offered as a new source.
 func init() {
 	demo.Register(connector.Default)
+	demo.RegisterMail(connector.Default)
 	telegram.Register(connector.Default)
 }
 

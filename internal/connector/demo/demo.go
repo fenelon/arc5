@@ -227,7 +227,10 @@ func Seed(store *archive.Store) (bool, error) {
 	b.say("hikes", "oleg", at(10, 7, 5), "Маршрут на субботу в закрепе. Встречаемся у причала в восемь.", false)
 	b.say("hikes", "", at(10, 7, 40), "Буду. Беру горелку и чай.", true)
 	b.say("saved", "", at(25, 9, 0), "Passport renewal: form 11, two photos, old passport.", true)
-	return true, b.err
+	if b.err != nil {
+		return true, b.err
+	}
+	return true, seedMail(store)
 }
 
 // builder stores sample messages and remembers the first error.

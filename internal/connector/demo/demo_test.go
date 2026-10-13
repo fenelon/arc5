@@ -24,7 +24,7 @@ func TestSeedBuildsAnArchiveOnce(t *testing.T) {
 		t.Fatalf("Seed = %v, %v", seeded, err)
 	}
 	accounts, err := store.Accounts()
-	if err != nil || len(accounts) != 1 || accounts[0].Connector != Name || accounts[0].Label != "Personal" {
+	if err != nil || len(accounts) != 2 || accounts[0].Connector != Name || accounts[0].Label != "Personal" {
 		t.Fatalf("accounts = %+v, %v", accounts, err)
 	}
 	chats, err := store.ChatList([]int64{accounts[0].ID}, 100, 0)
@@ -108,7 +108,7 @@ func TestSeedBuildsAnArchiveOnce(t *testing.T) {
 	if err != nil || again {
 		t.Fatalf("second Seed = %v, %v; want it to leave an archive with accounts alone", again, err)
 	}
-	if after, _ := store.Accounts(); len(after) != 1 {
+	if after, _ := store.Accounts(); len(after) != 2 {
 		t.Fatalf("%d accounts after a second Seed", len(after))
 	}
 }

@@ -27,6 +27,8 @@ func (s *Store) UpsertChat(accountID int64, c model.Chat) error {
 	return err
 }
 
+// UpsertSender records a sender. A name it already has is kept when the
+// source gives none, as mail often does for an address.
 func (s *Store) UpsertSender(accountID int64, sn model.Sender) error {
 	if sn.SourceID == "" {
 		return fmt.Errorf("%w: sender needs a source ID", ErrInvalid)
@@ -34,7 +36,8 @@ func (s *Store) UpsertSender(accountID int64, sn model.Sender) error {
 	_, err := s.w.Exec(`
 		INSERT INTO senders (account_id, source_id, display_name, username)
 		VALUES (?, ?, ?, ?)
-		ON CONFLICT (account_id, source_id) DO UPDATE SET display_name = excluded.display_name, username = excluded.username`,
+		ON CONFLICT (account_id, source_id) DO UPDATE SET username = excluded.username,
+			display_name = CASE WHEN excluded.display_name = '' THEN display_name ELSE excluded.display_name END`,
 		accountID, sn.SourceID, clean(sn.DisplayName), clean(sn.Username))
 	return err
 }

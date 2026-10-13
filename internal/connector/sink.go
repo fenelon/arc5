@@ -17,8 +17,14 @@ type accountSink struct {
 	progress  func(Progress)
 }
 
-func newSink(store *archive.Store, accountID int64, requests <-chan model.AttachmentRef, progress func(Progress)) Sink {
+func newSink(store *archive.Store, accountID int64, requests <-chan model.AttachmentRef, progress func(Progress)) MailSink {
 	return &accountSink{store: store, accountID: accountID, requests: requests, progress: progress}
+}
+
+// NewSink binds the archive to one account, as the runner does, for
+// connector tests that write to a real archive.
+func NewSink(store *archive.Store, accountID int64, requests <-chan model.AttachmentRef, progress func(Progress)) MailSink {
+	return newSink(store, accountID, requests, progress)
 }
 
 // classify marks archive failures the connector cannot fix as ErrStorage and
@@ -89,6 +95,41 @@ func (s *accountSink) AvatarStored(ref model.AvatarRef) (bool, error) {
 
 func (s *accountSink) PutAvatar(ref model.AvatarRef, r io.Reader) error {
 	return classify(s.store.PutAvatar(s.accountID, ref, r))
+}
+
+func (s *accountSink) UpsertFolder(f model.Folder) error {
+	return classify(s.store.UpsertFolder(s.accountID, f))
+}
+
+func (s *accountSink) FolderArchived(folderSourceID string) (bool, error) {
+	on, err := s.store.FolderArchived(s.accountID, folderSourceID)
+	return on, classify(err)
+}
+
+func (s *accountSink) FileInFolder(folderSourceID string, uid uint32, chatSourceID, messageSourceID string) error {
+	return classify(s.store.FileInFolder(s.accountID, folderSourceID, uid, chatSourceID, messageSourceID))
+}
+
+func (s *accountSink) FolderUIDs(folderSourceID string) ([]uint32, error) {
+	uids, err := s.store.FolderUIDs(s.accountID, folderSourceID)
+	return uids, classify(err)
+}
+
+func (s *accountSink) LeaveFolder(folderSourceID string, uids []uint32) error {
+	return classify(s.store.LeaveFolder(s.accountID, folderSourceID, uids))
+}
+
+func (s *accountSink) ResetFolder(folderSourceID string) error {
+	return classify(s.store.ResetFolder(s.accountID, folderSourceID))
+}
+
+func (s *accountSink) SetAccountAddress(address string) error {
+	return classify(s.store.SetAccountAddress(s.accountID, address))
+}
+
+func (s *accountSink) Original(chatSourceID, messageSourceID string) (io.ReadCloser, error) {
+	r, err := s.store.Original(s.accountID, chatSourceID, messageSourceID)
+	return r, classify(err)
 }
 
 // NewState returns an account's state, for a setup flow run outside the runner.

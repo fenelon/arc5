@@ -116,6 +116,26 @@ func TestUpsertSenderUpdatesName(t *testing.T) {
 	}
 }
 
+func TestUpsertSenderKeepsANameItIsNotGiven(t *testing.T) {
+	s := openTemp(t)
+	acc := newAccount(t, s)
+	for _, sn := range []model.Sender{
+		{SourceID: "dan@example.com", DisplayName: "Dan Whitfield", Username: "dan@example.com"},
+		{SourceID: "dan@example.com", Username: "Dan@Example.com"},
+	} {
+		if err := s.UpsertSender(acc, sn); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var name, username string
+	if err := s.r.QueryRow(`SELECT display_name, username FROM senders`).Scan(&name, &username); err != nil {
+		t.Fatal(err)
+	}
+	if name != "Dan Whitfield" || username != "Dan@Example.com" {
+		t.Fatalf("sender = %q, %q", name, username)
+	}
+}
+
 func TestInvalidUTF8InNamesIsReplaced(t *testing.T) {
 	s := openTemp(t)
 	acc := newAccount(t, s)
