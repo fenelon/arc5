@@ -218,8 +218,12 @@ func (r *run) put(ctx context.Context, d download) error {
 	}()
 	putErr := r.sink.PutMedia(d.ref, pr)
 	pr.CloseWithError(errors.New("the archive stopped reading"))
-	if err := <-done; err != nil {
-		return err
+	downloadErr := <-done
+	if errors.Is(putErr, connector.ErrStorage) {
+		return putErr // the archive failed, not the download: say so, so ingestion pauses
+	}
+	if downloadErr != nil {
+		return downloadErr
 	}
 	return putErr
 }

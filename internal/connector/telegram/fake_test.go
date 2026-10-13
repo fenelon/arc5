@@ -163,6 +163,7 @@ type memSink struct {
 	requests  chan model.AttachmentRef
 	progress  []connector.Progress
 	failWrite error
+	failMedia error // PutMedia reads a little, then fails with this
 }
 
 func newMemSink() *memSink {
@@ -241,6 +242,13 @@ func (s *memSink) LookupChats(id string, kinds []model.ChatKind) ([]string, erro
 }
 
 func (s *memSink) PutMedia(ref model.AttachmentRef, r io.Reader) error {
+	s.mu.Lock()
+	fail := s.failMedia
+	s.mu.Unlock()
+	if fail != nil {
+		io.ReadFull(r, make([]byte, 2))
+		return fail
+	}
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return err

@@ -14,6 +14,7 @@ import (
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
 
+	"github.com/fenelon/arc5/internal/connector"
 	"github.com/fenelon/arc5/internal/model"
 )
 
@@ -237,5 +238,29 @@ func TestAvatarsAreDownloadedOnce(t *testing.T) {
 	working(t, r2, "nothing", func() bool { return true })
 	if len(dl.list()) != 2 {
 		t.Errorf("pictures already kept were fetched again: %v", dl.list())
+	}
+}
+
+// Review finding: a full disk while storing a file was reported as a failed
+// download, so every queued file was marked failed instead of the archive
+// pausing.
+func TestAFullDiskStopsTheDownloads(t *testing.T) {
+	dl := &downloads{}
+	sink := newMemSink()
+	sink.failMedia = fmt.Errorf("%w: no space left on device", connector.ErrStorage)
+	r, _ := newTestRun(t, &fakeConn{download: dl.download}, sink)
+	r.store(photoMessage(1, 101, 1), true)
+	done := make(chan error, 1)
+	go func() { done <- r.mediaWorker(context.Background()) }()
+	select {
+	case err := <-done:
+		if !errors.Is(err, connector.ErrStorage) {
+			t.Errorf("the worker stopped with %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the worker carried on after a full disk")
+	}
+	if len(sink.statuses) != 0 {
+		t.Errorf("statuses = %v; nothing should be marked failed", sink.statuses)
 	}
 }
