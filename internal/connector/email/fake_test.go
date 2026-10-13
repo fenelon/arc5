@@ -40,7 +40,10 @@ type fakeMessage struct {
 func newFakeServer(folders ...string) *fakeServer {
 	s := &fakeServer{password: "app-password", folders: map[string]*fakeFolder{}, changed: make(chan struct{}, 1)}
 	for _, f := range folders {
-		name, attrs, _ := strings.Cut(f, " ")
+		name, attrs, _ := strings.Cut(f, ` \`) // attributes start with a backslash
+		if attrs != "" {
+			attrs = `\` + attrs
+		}
 		s.order = append(s.order, name)
 		s.folders[name] = &fakeFolder{attrs: strings.Fields(attrs), validity: 7, next: 1}
 	}

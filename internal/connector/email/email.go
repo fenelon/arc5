@@ -20,6 +20,7 @@ type Connector struct {
 	// slice is how long a cycle spends on history before looking for new
 	// mail again; wait is how long it waits for news when history is done.
 	slice, wait time.Duration
+	afterCycle  func() // for tests: called when a cycle ends
 }
 
 // New is the connector with a real IMAP client.
