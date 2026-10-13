@@ -6,6 +6,7 @@ package email
 import (
 	"context"
 	"errors"
+	"net"
 	"strings"
 	"time"
 
@@ -21,11 +22,15 @@ type Connector struct {
 	// mail again; wait is how long it waits for news when history is done.
 	slice, wait time.Duration
 	afterCycle  func() // for tests: called when a cycle ends
+	// lookupMX finds who receives a domain's mail, so a custom domain on a
+	// known service is set up as that service. Nil skips the lookup.
+	lookupMX func(ctx context.Context, domain string) ([]*net.MX, error)
 }
 
 // New is the connector with a real IMAP client.
 func New() *Connector {
-	return &Connector{dial: dialIMAP, now: time.Now, sleep: sleep, slice: time.Minute, wait: 5 * time.Minute}
+	return &Connector{dial: dialIMAP, now: time.Now, sleep: sleep, slice: time.Minute, wait: 5 * time.Minute,
+		lookupMX: net.DefaultResolver.LookupMX}
 }
 
 // Register adds the email connector.

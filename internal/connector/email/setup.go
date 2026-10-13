@@ -60,7 +60,32 @@ type setup struct {
 	state   connector.State
 	at      string
 	address string
-	stored  account // the login stored before, when logging in again
+	stored  account  // the login stored before, when logging in again
+	known   provider // the address's provider, once looked up
+	looked  bool
+}
+
+// mxTimeout bounds the lookup of who receives a domain's mail.
+const mxTimeout = 5 * time.Second
+
+// provider is the address's provider: from its domain, or, for a domain arc5
+// does not know, from who receives its mail.
+func (s *setup) provider(ctx context.Context) provider {
+	if s.looked {
+		return s.known
+	}
+	p := providerFor(s.address)
+	if p.name == "" && !p.oauthOnly && s.c.lookupMX != nil {
+		_, domain, _ := strings.Cut(strings.ToLower(s.address), "@")
+		ctx, cancel := context.WithTimeout(ctx, mxTimeout)
+		mx, err := s.c.lookupMX(ctx, domain)
+		cancel()
+		if found := providerByMail(mx); err == nil && (found.name != "" || found.oauthOnly) {
+			p = found
+		}
+	}
+	s.known, s.looked = p, true
+	return p
 }
 
 func addressStep() connector.Step {
@@ -74,7 +99,7 @@ func addressStep() connector.Step {
 }
 
 func (s *setup) serverStep() connector.Step {
-	p := providerFor(s.address)
+	p := s.known
 	host, port, username := p.host, p.port, s.address
 	if s.stored.Host != "" && strings.EqualFold(s.stored.Address, s.address) {
 		host, port, username = s.stored.Host, s.stored.Port, s.stored.Username
@@ -104,6 +129,7 @@ func (s *setup) Next(ctx context.Context, input map[string]string) (connector.St
 		}
 		if ok && stored.Address != "" {
 			s.stored, s.address, s.at = stored, stored.Address, stepServer
+			s.provider(ctx)
 			return s.serverStep(), nil
 		}
 		s.at = stepAddress
@@ -115,7 +141,8 @@ func (s *setup) Next(ctx context.Context, input map[string]string) (connector.St
 		if err != nil || !strings.Contains(parsed.Address, "@") {
 			return addressStep(), errors.New("Type the whole address, such as name@gmail.com.")
 		}
-		if providerFor(parsed.Address).oauthOnly {
+		s.address, s.looked = parsed.Address, false
+		if s.provider(ctx).oauthOnly {
 			return addressStep(), errors.New("Microsoft mailboxes (Outlook.com, Hotmail, Live, Microsoft 365) no longer accept passwords from mail programs, and arc5 cannot sign in to them yet.")
 		}
 		s.address, s.at = parsed.Address, stepServer
@@ -154,7 +181,7 @@ func (s *setup) login(ctx context.Context, input map[string]string) (connector.S
 	c, err := s.c.dial(ctx, a)
 	switch {
 	case errors.Is(err, errLoginRefused):
-		return s.serverStep(), errors.New(providerFor(s.address).refused)
+		return s.serverStep(), errors.New(s.known.refused)
 	case err != nil:
 		return s.serverStep(), fmt.Errorf("arc5 could not reach %s:%d: %v. Check the server and the port.", a.Host, a.Port, err)
 	}
