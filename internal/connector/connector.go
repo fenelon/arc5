@@ -45,6 +45,11 @@ type Sink interface {
 	// more than once.
 	RequestedMedia() <-chan model.AttachmentRef
 	ReportProgress(Progress)
+	// AvatarStored reports whether a chat's or sender's picture with this
+	// identity is already kept, so only new pictures are downloaded.
+	AvatarStored(model.AvatarRef) (bool, error)
+	// PutAvatar stores a chat's or sender's picture and makes it the one shown.
+	PutAvatar(model.AvatarRef, io.Reader) error
 }
 
 // State is a connector's private per-account key-value store, for sessions and checkpoints.

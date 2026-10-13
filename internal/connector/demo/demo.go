@@ -99,15 +99,38 @@ func at(daysBefore, hour, minute int) time.Time {
 	return day.AddDate(0, 0, -daysBefore).Add(time.Duration(hour)*time.Hour + time.Duration(minute)*time.Minute)
 }
 
-// floorPlan draws a small picture to stand for a photo.
-func floorPlan() []byte {
+// floorPlan draws a small picture to stand for a photo; the corrected plan
+// has a door in the inner wall.
+func floorPlan(corrected bool) []byte {
 	img := image.NewRGBA(image.Rect(0, 0, 320, 200))
 	wall, floor := color.RGBA{0x0D, 0x25, 0x30, 0xFF}, color.RGBA{0xD7, 0xEC, 0xEF, 0xFF}
 	for y := range 200 {
 		for x := range 320 {
 			c := floor
-			if x < 6 || x >= 314 || y < 6 || y >= 194 || (x > 150 && x < 156 && y < 120) || (y > 116 && y < 122 && x > 150) {
+			door := corrected && x > 150 && x < 156 && y > 40 && y < 80
+			if !door && (x < 6 || x >= 314 || y < 6 || y >= 194 || (x > 150 && x < 156 && y < 120) || (y > 116 && y < 122 && x > 150)) {
 				c = wall
+			}
+			img.SetRGBA(x, y, c)
+		}
+	}
+	var buf bytes.Buffer
+	png.Encode(&buf, img)
+	return buf.Bytes()
+}
+
+// portrait draws a small picture to stand for someone's profile photo: a
+// head and shoulders in fg on bg.
+func portrait(bg, fg color.RGBA) []byte {
+	const size = 160
+	img := image.NewRGBA(image.Rect(0, 0, size, size))
+	for y := range size {
+		for x := range size {
+			c := bg
+			hx, hy := x-80, y-62  // the head
+			sx, sy := x-80, y-170 // the shoulders
+			if hx*hx+hy*hy < 30*30 || (sx*sx)/4+sy*sy < 60*60 {
+				c = fg
 			}
 			img.SetRGBA(x, y, c)
 		}
@@ -145,6 +168,22 @@ func Seed(store *archive.Store) (bool, error) {
 	} {
 		b.do(store.UpsertChat(acc, c))
 	}
+	// Pictures for some chats and people; the others show initials. A private
+	// chat's picture is its person's, as the Telegram connector keeps it.
+	for _, p := range []struct {
+		chat, sender string
+		bg, fg       color.RGBA
+	}{
+		{"dan", "dan", color.RGBA{0x2E, 0x5E, 0x8C, 0xFF}, color.RGBA{0xF2, 0xC1, 0x8D, 0xFF}},
+		{"marina", "marina", color.RGBA{0x7A, 0x3E, 0x6B, 0xFF}, color.RGBA{0xF6, 0xD5, 0xB8, 0xFF}},
+		{"familia", "", color.RGBA{0x3D, 0x7A, 0x4F, 0xFF}, color.RGBA{0xE8, 0xF1, 0xD8, 0xFF}},
+	} {
+		picture := portrait(p.bg, p.fg)
+		b.do(store.PutAvatar(acc, model.AvatarRef{Kind: model.AvatarChat, SourceID: p.chat, AvatarID: "photo:" + p.chat}, bytes.NewReader(picture)))
+		if p.sender != "" {
+			b.do(store.PutAvatar(acc, model.AvatarRef{Kind: model.AvatarSender, SourceID: p.sender, AvatarID: "photo:" + p.chat}, bytes.NewReader(picture)))
+		}
+	}
 
 	// Years of small talk with Dan, so the year rail has something to show.
 	for month := 0; month < 66; month++ {
@@ -158,9 +197,14 @@ func Seed(store *archive.Store) (bool, error) {
 	first.Text, first.EditedAt = "Yes. Room 4 from ten, the old one with the broken blinds.", at(1, 18, 44)
 	b.put(first)
 	plan := b.message("dan", "dan", at(1, 18, 41), "Here is the floor plan.", false)
-	plan.Attachments = []model.Attachment{{Kind: model.AttachPhoto, FileName: "floor-plan.png", MimeType: "image/png", Size: 2048}}
+	plan.Attachments = []model.Attachment{{Kind: model.AttachPhoto, FileName: "floor-plan.png", MimeType: "image/png", Size: 2048, SourceID: "photo:plan-1"}}
 	b.put(plan)
-	b.do(store.PutMedia(acc, model.AttachmentRef{ChatSourceID: "dan", MessageSourceID: plan.SourceID}, bytes.NewReader(floorPlan())))
+	b.do(store.PutMedia(acc, model.AttachmentRef{ChatSourceID: "dan", MessageSourceID: plan.SourceID}, bytes.NewReader(floorPlan(false))))
+	// Dan swaps the picture for a corrected one: the first is kept as replaced.
+	plan.Attachments = []model.Attachment{{Kind: model.AttachPhoto, FileName: "floor-plan-v2.png", MimeType: "image/png", Size: 2048, SourceID: "photo:plan-2"}}
+	plan.EditedAt = at(1, 18, 43)
+	b.put(plan)
+	b.do(store.PutMedia(acc, model.AttachmentRef{ChatSourceID: "dan", MessageSourceID: plan.SourceID}, bytes.NewReader(floorPlan(true))))
 	b.put(model.Message{ChatSourceID: "dan", SourceID: b.next(), Kind: model.KindService, SentAt: at(1, 18, 42), Text: "Dan Whitfield pinned a message"})
 	gone := b.say("dan", "dan", at(0, 10, 2), "Marina's flight lands at 18:40. Can you pick her up, or should I book a taxi?", false)
 	b.do(store.MarkDeleted(acc, "dan", []string{gone.SourceID}))

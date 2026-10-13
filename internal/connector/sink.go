@@ -28,6 +28,7 @@ func classify(err error) error {
 	case err == nil:
 		return nil
 	case errors.Is(err, archive.ErrUnknownChat),
+		errors.Is(err, archive.ErrNotFound),
 		errors.Is(err, archive.ErrUnknownAttachment),
 		errors.Is(err, archive.ErrMediaRead),
 		errors.Is(err, archive.ErrInvalid):
@@ -75,6 +76,15 @@ func (s *accountSink) ChatArchived(chatSourceID string) (bool, error) {
 func (s *accountSink) RequestedMedia() <-chan model.AttachmentRef { return s.requests }
 
 func (s *accountSink) ReportProgress(p Progress) { s.progress(p) }
+
+func (s *accountSink) AvatarStored(ref model.AvatarRef) (bool, error) {
+	stored, err := s.store.AvatarStored(s.accountID, ref)
+	return stored, classify(err)
+}
+
+func (s *accountSink) PutAvatar(ref model.AvatarRef, r io.Reader) error {
+	return classify(s.store.PutAvatar(s.accountID, ref, r))
+}
 
 // NewState returns an account's state, for a setup flow run outside the runner.
 func NewState(store *archive.Store, accountID int64) State {
