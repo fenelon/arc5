@@ -36,6 +36,38 @@ arc5 listens on this computer only. To reach it from elsewhere, put it behind
 a reverse proxy that adds TLS, or a VPN. Behind a proxy that sends
 `X-Forwarded-Proto: https`, the login cookie is marked `Secure`.
 
+## Run in a container
+
+The `Dockerfile` builds a small image that runs `arc5 serve` on port 8080,
+keeps the archive in `/data`, and checks `/healthz`. arc5 needs no cgo, so an
+image for another machine builds quickly on this one:
+
+```sh
+docker build --platform linux/amd64 -t arc5:latest .   # linux/arm64 for ARM
+docker save arc5:latest -o dist/arc5-amd64.tar
+```
+
+**On a Synology NAS** with Container Manager:
+
+1. Container Manager > Image > Add > Add From File: choose
+   `dist/arc5-amd64.tar`. Most Synology models are amd64; for an ARM model,
+   build with `--platform linux/arm64`.
+2. In File Station, make a folder for the project, for example `docker/arc5`.
+3. Container Manager > Project > Create: name it `arc5`, choose that folder,
+   and upload [`deploy/nas/compose.yaml`](deploy/nas/compose.yaml). Set `TZ`
+   in it to your time zone first. The archive goes in the folder's `data`
+   subfolder, where Hyper Backup can include it.
+4. Open `http://<nas>:8080`, for example over Tailscale, and choose a
+   password.
+
+To update, import a newly built image the same way, then stop the project and
+build it again so the container is made from the new image. The archive in
+`data` stays.
+
+The compose file runs arc5 as root inside the container, because DSM's access
+lists on shared folders may refuse a user DSM does not know. It describes how
+to run as a DSM user instead.
+
 ## Use
 
 - **Search** with the box at the top. It covers the source chosen in the

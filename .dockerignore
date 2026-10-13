@@ -1,0 +1,8 @@
+.git
+.claude
+.superpowers
+/arc5
+/data
+/dist
+/docs
+*.tar
