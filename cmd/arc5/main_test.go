@@ -304,6 +304,19 @@ func TestDemoCommandAndTheInterface(t *testing.T) {
 		_, body = read(client.Get(base + "/s/chats"))
 	}
 
+	// Search runs on the index the demo archive was written with.
+	if code, body := read(client.Get(base + "/s/chats?q=marina")); code != http.StatusOK ||
+		!strings.Contains(body, `<mark class="hit">Marina</mark>`) || !strings.Contains(body, "Chats and people") {
+		t.Fatalf("searching the demo: %d", code)
+	}
+	if code, body := read(client.Get(base + "/settings")); code != http.StatusOK || !strings.Contains(body, "The index is up to date for English.") {
+		t.Fatalf("settings: %d", code)
+	}
+	// The demo is not offered as a source to add.
+	if _, body := read(client.Get(base + "/sources/new")); strings.Contains(body, `value="demo"`) {
+		t.Error("the demo connector is offered under Add a source")
+	}
+
 	cancel()
 	select {
 	case err := <-done:

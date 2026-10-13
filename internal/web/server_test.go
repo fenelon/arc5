@@ -203,7 +203,8 @@ func TestFirstRunSetup(t *testing.T) {
 		}
 	}
 	s.signIn()
-	if rec := s.get("/"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "No sources yet") {
+	if rec := s.get("/"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "No sources yet") ||
+		!strings.Contains(rec.Body.String(), `href="/sources/new"`) {
 		t.Fatalf("home after setup: %d", rec.Code)
 	}
 }

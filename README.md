@@ -4,10 +4,10 @@ A self-hosted archive for your message history. It keeps a durable, searchable
 copy of your chats so you can clean out accounts or use auto-delete without
 losing anything.
 
-**Status:** early development. The archive, the search engine and a web
-interface for reading chats run. Search in the interface and the Telegram
-connector are not built yet, so the only thing to read is the demo archive.
-The design is in [`docs/superpowers/specs`](docs/superpowers/specs).
+**Status:** early development. The archive, the search engine and the web
+interface run: reading chats, searching, managing sources and settings. The
+Telegram connector is not built yet, so the only thing to read is the demo
+archive. The design is in [`docs/superpowers/specs`](docs/superpowers/specs).
 
 ## Run
 
@@ -36,10 +36,30 @@ arc5 listens on this computer only. To reach it from elsewhere, put it behind
 a reverse proxy that adds TLS, or a VPN. Behind a proxy that sends
 `X-Forwarded-Proto: https`, the login cookie is marked `Secure`.
 
+## Use
+
+- **Search** with the box at the top. It covers the source chosen in the
+  picker, or every source of that kind under "Everything at once". Words are
+  ANDed; `"quoted words"` match as a phrase; the last word also matches as the
+  start of a longer one. Results list matching chats and people first, then
+  messages, best match first or newest first, with filters for attachments,
+  messages deleted at the source, joins and calls, and dates.
+- **Sources** lists every account arc5 keeps a copy of. Choose one to rename
+  it, choose which of its chats are archived, change its settings, sign it
+  out, or remove it. Removing a source stops it and forgets its login; its
+  messages stay in the archive. "Add a source" runs the source's login.
+- **Settings** has the theme, the search languages, the largest attachment
+  downloaded automatically, and the password.
+
+The demo source can be signed out and logged in again from the Sources page;
+its login code is 12345.
+
 ## Search languages
 
 Search finds other forms of a word (`cat` finds `cats`) in the languages you
-choose. The default is English. Choose your own and rebuild the index with:
+choose under Settings, which rebuilds the index in the background. The
+default is English. The same can be done from the command line, with the
+server stopped:
 
 ```bash
 ./arc5 reindex --data ./data --languages en,ru,es
@@ -54,8 +74,8 @@ prefix and by phrase, and Chinese, Japanese and Thai are matched by character
 sequence. List only the languages you write in: each extra one that shares an
 alphabet makes the index larger and matches looser.
 
-Restart a running server after changing the list, so it indexes new messages
-the same way.
+A server running while `arc5 reindex` changes the list keeps its old list
+until it is restarted; changing it under Settings needs no restart.
 
 ## Develop
 
