@@ -2,19 +2,20 @@
 <body class="app">
 {{template "topbar" .}}
 {{template "banner" .}}
-<main class="plain plain--settings">
-<p><a class="panel__link" href="/sources">Back to sources</a></p>
+<main class="plain plain--form">
+<a class="back-link" href="/sources"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Back to sources</a>
 <h1>Add a source</h1>
-{{if .Choices}}<form class="card" method="post" action="/sources/new">
+{{if .Choices}}<p class="plain__lead">Choose the kind of account and name it. Its login comes next.</p>
+<form class="card" method="post" action="/sources/new">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
 {{if .Problem}}<p class="alert" role="alert">{{.Problem}}</p>{{end}}
 <fieldset class="kinds"><legend class="panel__label">What kind of account?</legend>
-{{range .Choices}}<label class="kind">{{template "logo" .Logo}}<input type="radio" name="connector" value="{{.Name}}"{{if .Checked}} checked{{end}}> <span>{{.Title}}</span></label>
+{{range .Choices}}<label class="kind"><input class="kind__input" type="radio" name="connector" value="{{.Name}}"{{if .Checked}} checked{{end}}>{{template "logo" .Logo}}<span class="tile__text"><span class="tile__name">{{.Title}}</span>{{if .Blurb}}<span class="tile__sub tile__sub--wrap">{{.Blurb}}</span>{{end}}</span><span class="kind__mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></span></label>
 {{end}}</fieldset>
-<div class="field"><label for="source-name">Name, as the source picker shows it</label><input id="source-name" name="name" value="{{.Name}}" maxlength="100" placeholder="Personal" required></div>
+<div class="field"><label class="panel__label" for="source-name">Name</label><span class="field__help" id="source-name-help">As the source picker shows it, such as Personal or Work.</span><input id="source-name" name="name" value="{{.Name}}" maxlength="100" placeholder="Personal" aria-describedby="source-name-help" required></div>
 <button class="button" type="submit">Continue</button>
 </form>
-{{else}}<p>No kind of source is built into this copy of arc5 yet. Telegram arrives with the next release.</p>
+{{else}}<p class="plain__lead">No kind of source is built into this copy of arc5 yet.</p>
 {{end}}</main>
 </body>
 </html>{{end}}

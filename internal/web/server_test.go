@@ -204,7 +204,7 @@ func TestFirstRunSetup(t *testing.T) {
 	}
 	s.signIn()
 	if rec := s.get("/"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "No sources yet") ||
-		!strings.Contains(rec.Body.String(), `href="/sources/new"`) {
+		!strings.Contains(rec.Body.String(), "Start your archive") {
 		t.Fatalf("home after setup: %d", rec.Code)
 	}
 }
