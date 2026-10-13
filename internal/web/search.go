@@ -26,9 +26,10 @@ var errNoSuchPerson = errors.New("no such person here")
 
 // SearchBox is the search field in the top bar.
 type SearchBox struct {
-	Action  string // where the form goes: the source's page
-	Results string // where the search controller fetches results from
-	Query   string
+	Action      string // where the form goes: the source's page
+	Results     string // where the search controller fetches results from
+	Query       string
+	Placeholder string // "" for the messengers' wording
 }
 
 // Piece is a run of text, marked when the search matched it.
@@ -81,6 +82,7 @@ type Results struct {
 	Filters   *FilterBox // nil for one person's messages
 	Empty     bool
 	Note      string
+	Mail      bool // shown in a mail source, which has conversations, not chats
 }
 
 // searchQuery is the search text of a request, cut to a sane length.
@@ -211,6 +213,9 @@ func fragmentText(fragments []search.Fragment) string {
 // resultsFragment answers the search controller: the left column's content
 // for the typed text, or the chat list when the text is empty.
 func (s *Server) resultsFragment(w http.ResponseWriter, r *http.Request, sess archive.Session) {
+	if s.mailRoute(w, r, sess, true) {
+		return
+	}
 	data, _, ok := s.sourceShell(w, r, sess, 0)
 	if !ok {
 		return

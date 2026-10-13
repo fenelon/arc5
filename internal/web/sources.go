@@ -99,7 +99,7 @@ func logoFor(name string) string {
 	switch name {
 	case "telegram", "whatsapp":
 		return name
-	case "imap", "email":
+	case "imap", "email", "demo-mail":
 		return "email"
 	}
 	return "generic"
@@ -133,6 +133,17 @@ var kinds = []struct {
 }{
 	{connector.DisplayChats, "chats", "Messengers", "Messengers, shown as chats", "messenger", "messengers"},
 	{connector.DisplayMail, "mail", "Mail", "Mailboxes, shown as mail", "mailbox", "mailboxes"},
+}
+
+// one reports whether the selection is one source, rather than every source
+// of a kind.
+func (sel selection) one() bool {
+	for _, k := range kinds {
+		if sel.Key == k.key {
+			return false
+		}
+	}
+	return len(sel.AccountIDs) == 1
 }
 
 func (s *Server) selection(key string, all []source) (selection, bool) {

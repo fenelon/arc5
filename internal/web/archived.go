@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/fenelon/arc5/internal/archive"
+	"github.com/fenelon/arc5/internal/connector"
 	"github.com/fenelon/arc5/internal/model"
 )
 
@@ -29,7 +30,46 @@ type archivedPage struct {
 	Name      string
 	Removed   bool
 	Saved     bool
+	Mail      bool // the switches are a mailbox's folders
 	Groups    []ChatGroup
+}
+
+// isMail reports whether an account's connector shows it as mail.
+func (s *Server) isMail(acc archive.Account) bool {
+	info, ok := s.deps.Registry.Info(acc.Connector)
+	return ok && info.Display == connector.DisplayMail
+}
+
+// folderRoles names the folders of special use on the folder switches.
+var folderRoles = map[model.FolderRole]string{
+	model.FolderInbox: "Inbox", model.FolderSent: "Sent mail", model.FolderAll: "Every message, once",
+	model.FolderDrafts: "Drafts", model.FolderJunk: "Junk", model.FolderTrash: "Trash",
+	model.FolderFlagged: "Starred", model.FolderImportant: "Marked important",
+}
+
+// archivedFolders is the folder switches of a mailbox.
+func (s *Server) archivedFolders(w http.ResponseWriter, r *http.Request, data archivedPage) {
+	folders, err := s.deps.Store.AccountFolders(data.AccountID)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	group := ChatGroup{Title: "Folders"}
+	for _, f := range folders {
+		detail := plural(f.Messages, "message", "messages")
+		if f.Messages == 0 {
+			detail = "Nothing archived yet"
+		}
+		if role, ok := folderRoles[f.Role]; ok && role != f.Name {
+			detail = role + ", " + lowerFirst(detail)
+		}
+		group.Chats = append(group.Chats, ChatToggle{ID: f.ID, Title: f.Name, Detail: detail, Archived: f.Archived})
+	}
+	if len(group.Chats) > 0 {
+		data.Groups = append(data.Groups, group)
+	}
+	data.Mail, data.Title = true, "Folders of "+data.Name
+	s.render(w, http.StatusOK, "archived", data)
 }
 
 var chatKindTitles = []struct {
@@ -57,6 +97,10 @@ func (s *Server) archivedChats(w http.ResponseWriter, r *http.Request, sess arch
 	data := archivedPage{
 		Page: s.chrome(r, sess, "Chats of "+acc.Label, all, ""), AccountID: acc.ID, Name: acc.Label,
 		Removed: !acc.RemovedAt.IsZero(), Saved: r.URL.Query().Get("saved") == "1",
+	}
+	if s.isMail(acc) {
+		s.archivedFolders(w, r, data)
+		return
 	}
 	for _, k := range chatKindTitles {
 		group := ChatGroup{Title: k.title}
@@ -99,7 +143,11 @@ func (s *Server) saveArchivedChats(w http.ResponseWriter, r *http.Request, _ arc
 			changes[id] = name == "archived"
 		}
 	}
-	if err := s.deps.Store.SetChatsArchived(acc.ID, changes); err != nil {
+	save := s.deps.Store.SetChatsArchived
+	if s.isMail(acc) {
+		save = s.deps.Store.SetFoldersArchived
+	}
+	if err := save(acc.ID, changes); err != nil {
 		s.fail(w, err)
 		return
 	}

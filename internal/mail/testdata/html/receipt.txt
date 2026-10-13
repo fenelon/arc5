@@ -1,0 +1,14 @@
+[Ferretería Sol]
+
+Thank you for your order
+
+Order #10482 was placed on 2 October 2026.
+
+Item	Qty	Price
+Brass hinge, 75 mm	4	€ 12.00
+Wood screws (box of 100)	1	€ 4.50
+Total	€ 16.50
+
+Questions? Reply to this email or call 600 000 000.
+
+https://shop.example/orders/10482

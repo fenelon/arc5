@@ -10,11 +10,12 @@ const (
 	ChatGroup   ChatKind = "group"
 	ChatChannel ChatKind = "channel"
 	ChatBot     ChatKind = "bot"
+	ChatThread  ChatKind = "thread" // a mail conversation
 )
 
 func (k ChatKind) Valid() bool {
 	switch k {
-	case ChatPrivate, ChatGroup, ChatChannel, ChatBot:
+	case ChatPrivate, ChatGroup, ChatChannel, ChatBot, ChatThread:
 		return true
 	}
 	return false
@@ -23,7 +24,7 @@ func (k ChatKind) Valid() bool {
 // ArchivedByDefault reports whether a newly seen chat of this kind is archived
 // without the owner opting in.
 func (k ChatKind) ArchivedByDefault() bool {
-	return k == ChatPrivate || k == ChatGroup
+	return k == ChatPrivate || k == ChatGroup || k == ChatThread
 }
 
 type MessageKind string
@@ -119,6 +120,65 @@ type AttachmentRef struct {
 	SourceID string
 }
 
+// FolderRole is what a mail folder is for, from its SPECIAL-USE attribute or
+// its name.
+type FolderRole string
+
+const (
+	FolderInbox     FolderRole = "inbox"
+	FolderSent      FolderRole = "sent"
+	FolderAll       FolderRole = "all" // every message once, as Gmail's All Mail
+	FolderDrafts    FolderRole = "drafts"
+	FolderJunk      FolderRole = "junk"
+	FolderTrash     FolderRole = "trash"
+	FolderFlagged   FolderRole = "flagged"
+	FolderImportant FolderRole = "important"
+	FolderOther     FolderRole = "other"
+)
+
+func (r FolderRole) Valid() bool {
+	switch r {
+	case FolderInbox, FolderSent, FolderAll, FolderDrafts, FolderJunk, FolderTrash, FolderFlagged, FolderImportant, FolderOther:
+		return true
+	}
+	return false
+}
+
+// Folder is a mailbox's folder. ArchiveByDefault applies when the folder is
+// first seen; after that the owner's choice stands.
+type Folder struct {
+	SourceID         string
+	Name             string
+	Role             FolderRole
+	ArchiveByDefault bool
+}
+
+// AddressRole is the header a mail address came from.
+type AddressRole string
+
+const (
+	AddrFrom    AddressRole = "from"
+	AddrTo      AddressRole = "to"
+	AddrCc      AddressRole = "cc"
+	AddrBcc     AddressRole = "bcc"
+	AddrReplyTo AddressRole = "reply_to"
+)
+
+func (r AddressRole) Valid() bool {
+	switch r {
+	case AddrFrom, AddrTo, AddrCc, AddrBcc, AddrReplyTo:
+		return true
+	}
+	return false
+}
+
+// Address is one mail address of a message, with the name it came with.
+type Address struct {
+	Role    AddressRole
+	Name    string
+	Address string
+}
+
 type Message struct {
 	ChatSourceID    string
 	SourceID        string
@@ -132,4 +192,10 @@ type Message struct {
 	EditedAt        time.Time // zero if never edited
 	Raw             []byte    // the source's original payload as JSON, uncompressed
 	Attachments     []Attachment
+	// Mail only. Subject is the Subject header; Addresses are the From, To,
+	// Cc, Bcc and Reply-To addresses in header order; Original is the
+	// message as received, kept as a file in the media store.
+	Subject   string
+	Addresses []Address
+	Original  []byte
 }

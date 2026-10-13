@@ -13,7 +13,7 @@ session.
 | 3b. Search in the interface, Sources page with setup flows, Settings | Done, merged. Plan: `plans/2026-10-13-arc5-search-sources-settings.md` (its 13 decisions were taken as written) |
 | 4. Telegram connector and avatars | Done, merged, **not yet run against a real Telegram account** (tested against a fake client only). Plan: `plans/2026-10-13-arc5-telegram.md`; its 8 decisions were the executor's calls and await the owner's confirmation |
 | 5. Alerts, `backup`, Docker image, view-once option, the manual Telegram test | Not planned yet |
-| Email connector and the mail layout | **Spec drafted, awaiting the owner's review**: `specs/2026-10-13-email-archive-design.md` (9 decisions listed at its end). Not planned or built |
+| Email (IMAP, Gmail first) and the mail layout | Done, merged, **not yet run against a real mailbox** (tested against a fake client and go-imap's in-process server). Spec: `specs/2026-10-13-email-archive-design.md` (revised for Gmail and HTML-only mail; 10 decisions at its end to confirm). Plan: `plans/2026-10-13-arc5-email.md` |
 | Later | WhatsApp |
 
 `master` is pushed and green: `go vet ./... && go test -race ./...`.
@@ -69,6 +69,15 @@ backfill; downloading self-destructing media without calling
 `messages.readMessageContents` leaves it unopened for the sender. The
 connector never calls that method (a test enforces it).
 
+Email: the spec's ten decisions await confirmation, four of them changed
+from the first draft because go-imap v2 beta.8 cannot fetch Gmail's
+`X-GM-*` items (Gmail is archived through All Mail, Inbox and Sent by
+Message-ID; threads follow `References`). Still to confirm by a manual test
+with a Gmail app password: login, a message with several labels stored once,
+archiving in Gmail not counted as deletion, Trash counted as deletion,
+nothing marked as read, HTML-only newsletters reading cleanly, and whether
+drafts in All Mail keep their first text.
+
 ## Known gaps, deferred on purpose
 
 - From the Telegram review (listed in its plan's "Post-review changes"): an
@@ -77,6 +86,14 @@ connector never calls that method (a test enforces it).
   `selfID`); picture changes are noticed on the next run; requesting
   self-destructing media with the setting off says "Telegram no longer has
   this message"; an unreadable "Since" date means all history.
+
+- From the email review (listed in its plan's "Post-review changes"): the
+  same Message-ID twice in one folder tracks only the last UID; drafts in
+  All Mail may keep the first draft's text; deletions re-open a folder
+  without re-checking UIDVALIDITY; a subject in an unknown charset shows
+  raw; the conversation list groups every message of the accounts (slow past
+  about 100,000 messages); the mail migration's foreign-key check covers the
+  whole database.
 
 - A common single-word search ranked by relevance takes about 1 s at one
   million messages.

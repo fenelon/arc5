@@ -20,9 +20,10 @@ type Account struct {
 	Enabled   bool
 	CreatedAt time.Time
 	RemovedAt time.Time // zero unless the owner removed the source
+	Address   string    // a mailbox's own address, as its connector reported it
 }
 
-const accountColumns = `id, connector, label, settings, enabled, created_at, removed_at`
+const accountColumns = `id, connector, label, settings, enabled, created_at, removed_at, address`
 
 func encodeSettings(settings map[string]string) (string, error) {
 	if settings == nil {
@@ -40,7 +41,7 @@ func scanAccount(row interface{ Scan(dest ...any) error }) (Account, error) {
 		created  int64
 		removed  sql.NullInt64
 	)
-	if err := row.Scan(&a.ID, &a.Connector, &a.Label, &settings, &enabled, &created, &removed); err != nil {
+	if err := row.Scan(&a.ID, &a.Connector, &a.Label, &settings, &enabled, &created, &removed, &a.Address); err != nil {
 		return Account{}, err
 	}
 	a.Settings = map[string]string{}

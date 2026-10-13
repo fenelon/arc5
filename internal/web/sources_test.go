@@ -13,6 +13,7 @@ import (
 )
 
 func TestSourcesPageShowsTheChosenSource(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	personal, work := s.fakeAccount("Personal"), s.fakeAccount("Work")
@@ -45,6 +46,7 @@ func TestSourcesPageShowsTheChosenSource(t *testing.T) {
 }
 
 func TestSourceTilesSayWhatTheyAreDoing(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	live, catching := s.fakeAccount("Personal"), s.fakeAccount("Work")
@@ -59,6 +61,7 @@ func TestSourceTilesSayWhatTheyAreDoing(t *testing.T) {
 }
 
 func TestRenameSource(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.fakeAccount("Personal")
@@ -76,6 +79,7 @@ func TestRenameSource(t *testing.T) {
 }
 
 func TestSaveSourceSettings(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.fakeAccount("Personal")
@@ -118,6 +122,7 @@ func TestSaveSourceSettings(t *testing.T) {
 }
 
 func TestSignOutSource(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.fakeAccount("Personal")
@@ -133,6 +138,7 @@ func TestSignOutSource(t *testing.T) {
 }
 
 func TestRemoveSourceKeepsItsArchive(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.fakeAccount("Personal")
@@ -159,6 +165,7 @@ func TestRemoveSourceKeepsItsArchive(t *testing.T) {
 // The tiles and the chosen source's state refresh themselves while the
 // Sources page is open.
 func TestSourcesPageKeepsItsStatesCurrent(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	s.fakeAccount("Personal")

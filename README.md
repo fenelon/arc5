@@ -5,9 +5,9 @@ copy of your chats so you can clean out accounts or use auto-delete without
 losing anything.
 
 **Status:** early development. The archive, the search engine, the web
-interface and the Telegram connector run. The Telegram connector has been
-tested against a simulated Telegram only; it has not yet been run against a
-real account. The design is in [`docs/superpowers/specs`](docs/superpowers/specs).
+interface, the Telegram connector and the email (IMAP) connector run. Both
+connectors have been tested against simulated servers only; neither has yet
+been run against a real account. The design is in [`docs/superpowers/specs`](docs/superpowers/specs).
 
 ## Run
 
@@ -87,6 +87,46 @@ arc5 appears in Telegram's list of active sessions as "arc5 archive". Ending
 that session from another device, or "Sign this source out" in arc5, stops
 the archiving until you log in again. Telegram cannot show arc5 secret chats,
 and nothing deleted before arc5 first saw it can be recovered.
+
+## Archiving email
+
+arc5 reads a mailbox over IMAP, the way a mail program does, and keeps a copy
+of every message in the folders you choose. It never sends, moves, deletes or
+flags mail, and never marks it as read.
+
+1. In arc5, open Sources, choose "Add a source", then Email, and type the
+   address. For Gmail, Fastmail, iCloud, Yahoo, GMX, mailbox.org, Yandex and
+   Zoho the server is filled in; for other addresses check it.
+2. Type the password. Most providers want an **app password** for mail
+   programs rather than your usual one:
+   - **Gmail**: turn on 2-Step Verification for the Google account, then
+     create an app password at <https://myaccount.google.com/apppasswords>
+     and paste its 16 letters. A Google Workspace account works only if its
+     administrator allows app passwords and IMAP.
+   - iCloud, Yahoo, Fastmail and Yandex: create one in the account's security
+     settings; the login page says where.
+3. arc5 tests the login, then lists your folders and fetches mail, newest
+   first, while new mail keeps arriving within about a minute.
+
+Microsoft mailboxes (Outlook.com, Hotmail, Microsoft 365) no longer accept
+passwords from mail programs, so they cannot be added yet. Servers whose
+certificate does not verify are refused.
+
+What is kept: the Inbox, Sent and your own folders by default; Drafts, Junk
+and Trash when you switch them on under "Choose which folders are archived".
+On Gmail, whose All Mail folder holds every message once, only the Inbox,
+Sent and All Mail are archived by default, and each message is downloaded
+once however many labels it has. Every message keeps its original, which
+"Download original (.eml)" gives back. Mail sent only as HTML is turned into
+text; HTML is never shown. Attachments up to the attachment limit are kept as
+files to open; larger ones stay inside the original and "Fetch now" takes them
+out. A message deleted on the server stays, marked as deleted at source, once
+it has left every archived folder it was in; moving it between folders is not
+deletion.
+
+Each email source's settings: how far back to fetch mail, how fast, a pause
+switch for the catch-up, and your other addresses, so mail you sent from them
+counts as yours.
 
 ## Search languages
 

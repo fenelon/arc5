@@ -57,6 +57,7 @@ func newMarinaSite(t *testing.T) *marinaSite {
 }
 
 func TestSearchShowsChatsPeopleAndMessages(t *testing.T) {
+	t.Parallel()
 	m := newMarinaSite(t)
 	body := m.page(fmt.Sprintf("/s/%d?q=marina", m.acc))
 	has(t, body,
@@ -76,6 +77,7 @@ func TestSearchShowsChatsPeopleAndMessages(t *testing.T) {
 }
 
 func TestSearchFragment(t *testing.T) {
+	t.Parallel()
 	m := newMarinaSite(t)
 	rec := m.get(fmt.Sprintf("/s/%d/results?q=marina", m.acc))
 	if rec.Code != http.StatusOK || rec.Header().Get("Content-Security-Policy") != csp {
@@ -91,11 +93,13 @@ func TestSearchFragment(t *testing.T) {
 }
 
 func TestSearchNothingFound(t *testing.T) {
+	t.Parallel()
 	m := newMarinaSite(t)
 	has(t, m.page(fmt.Sprintf("/s/%d?q=zzzz", m.acc)), "Nothing matches “zzzz”.")
 }
 
 func TestSearchKeepsToTheChosenSource(t *testing.T) {
+	t.Parallel()
 	m := newMarinaSite(t)
 	work := m.account("Work", "telegram")
 	m.say(work, "Ana", "1", "Marina from work", noon)
@@ -106,6 +110,7 @@ func TestSearchKeepsToTheChosenSource(t *testing.T) {
 }
 
 func TestOpeningAHitKeepsTheResultsAndMarksTheMessage(t *testing.T) {
+	t.Parallel()
 	m := newMarinaSite(t)
 	body := m.page(fmt.Sprintf("/s/%d/c/%d?at=%d&q=marina", m.acc, m.dan, m.flight))
 	has(t, body, "Chats and people", "result result--current",
@@ -121,6 +126,7 @@ func TestOpeningAHitKeepsTheResultsAndMarksTheMessage(t *testing.T) {
 }
 
 func TestPersonShowsTheirMessages(t *testing.T) {
+	t.Parallel()
 	m := newMarinaSite(t)
 	body := m.page(fmt.Sprintf("/s/%d?q=marina&person=%d", m.acc, m.marina))
 	has(t, body, "Everything from Marina Sokolova", "Спасибо, что встретил!",
@@ -137,6 +143,7 @@ func TestPersonShowsTheirMessages(t *testing.T) {
 }
 
 func TestSearchPaging(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account("Personal", "telegram")
@@ -161,6 +168,7 @@ func TestSearchPaging(t *testing.T) {
 
 // Review Focus: hostile text in a query or a result is shown as text.
 func TestSearchShowsHostileTextAsText(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account("Personal", "telegram")

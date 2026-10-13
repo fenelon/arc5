@@ -1,0 +1,42 @@
+{{define "mail"}}{{template "head" .}}
+<body class="app app--mail{{if .Thread}} app--thread{{end}}">
+{{template "topbar" .}}
+{{template "banner" .}}
+<div class="mailshell{{if .Thread}} mailshell--thread{{end}}">
+<nav class="folders" aria-label="Folders">
+<div class="folders__box"><div class="folders__name">{{.Box.Name}}</div>{{with .Box.Address}}<div class="folders__address">{{.}}</div>{{end}}</div>
+{{range .Folders}}<a class="folder{{if .Current}} folder--current{{end}}" href="{{.Href}}"{{if .Current}} aria-current="page"{{end}}>{{template "folder-icon" .Icon}}{{.Label}}</a>
+{{end}}<p class="folders__note">Mail deleted from the mailbox stays here, marked as deleted at source.</p>
+</nav>
+<section class="mailmain" id="list" aria-label="{{if .Results}}Search results{{else if .Thread}}Conversation{{else}}{{.Heading}}{{end}}">
+{{template "mail-main" .}}
+</section>
+</div>
+</body>
+</html>{{end}}
+
+{{define "mail-main"}}{{if .Results}}<div class="mail-results">{{template "results" .Results}}</div>{{else if .Thread}}{{template "thread" .}}{{else}}<div class="mail-head"><h1 class="mail-head__title">{{.Heading}}</h1>
+<div class="mail-head__checks">{{range .Checks}}<a class="check{{if .On}} check--on{{end}}" role="checkbox" aria-checked="{{if .On}}true{{else}}false{{end}}" href="{{.Href}}"><span class="check__box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></span>{{.Label}}</a>{{end}}</div></div>
+<div class="mrows">{{range .Rows}}<a class="mrow" href="{{.Href}}"><span class="avatar mrow__avatar" aria-hidden="true">{{.Initials}}</span><span class="mrow__body"><span class="mrow__top"><span class="mrow__who"><span class="mrow__name">{{.Name}}</span>{{with .Detail}} <span class="mrow__detail">{{.}}</span>{{end}}</span>{{if .Deleted}}<span class="tag tag--warn">Deleted at source</span>{{end}}{{with .Count}}<span class="mrow__count">{{.}}</span>{{end}}{{if .Files}}<svg class="mrow__clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Has attachment"><path d="M21 11.5l-8.5 8.5a5 5 0 01-7-7L14 4.5a3.5 3.5 0 015 5L10.5 18a2 2 0 01-3-3L15 7.5"/></svg>{{end}}<span class="mrow__when">{{.When}}</span></span><span class="mrow__line"><span class="mrow__subject">{{.Subject}}</span>{{with .Snippet}} <span class="mrow__snippet">{{.}}</span>{{end}}</span></span></a>
+{{end}}{{with .Empty}}<p class="empty">{{.}}</p>{{end}}</div>
+{{if .OlderHref}}<div class="mail-more"><a class="button button--quiet" href="{{.OlderHref}}">Older conversations</a></div>{{end}}{{end}}{{end}}
+
+{{define "folder-icon"}}<svg class="folder__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{if eq . "inbox"}}<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1.5 3h5L16 13h5"/>{{else if eq . "sent"}}<path d="M21 3L10 14"/><path d="M21 3l-7 18-4-7-7-4z"/>{{else if eq . "all"}}<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>{{else}}<path d="M3 6h6l2 2h10v11H3z"/>{{end}}</svg>{{end}}
+
+{{define "thread"}}{{with .Thread}}<div class="thread">
+<a class="thread__back" href="{{.BackHref}}">{{.BackLabel}}</a>
+<h1 class="thread__title">{{.Title}}</h1>
+<p class="thread__summary">{{.Summary}}</p>
+<div class="mcards" data-controller="scroll" data-scroll-to-value="{{range .Cards}}{{if .Target}}{{.Anchor}}{{end}}{{end}}">
+{{range .Cards}}<details class="mcard{{if .Own}} mcard--own{{end}}{{if .Target}} mcard--target{{end}}" id="{{.Anchor}}"{{if .Open}} open{{end}}>
+<summary class="mcard__head"><span class="avatar mcard__avatar" aria-hidden="true">{{.Initials}}</span><span class="mcard__who"><span class="mcard__line"><span class="mcard__name">{{.Name}}</span>{{if and .Address (ne .Address .Name)}} <span class="mcard__address">{{.Address}}</span>{{end}}</span>{{with .To}}<span class="mcard__to">{{.}}</span>{{end}}<span class="mcard__snippet">{{if .Deleted}}<span class="tag tag--warn">{{.Deleted}}</span> {{end}}{{.Snippet}}</span></span><span class="mcard__meta"><span>{{.When}}</span><span>{{.Position}}</span></span></summary>
+<div class="mcard__body">{{if .Deleted}}<p class="mcard__deleted"><span class="tag tag--warn">{{.Deleted}}</span></p>{{end}}
+{{if .Text}}<div class="mcard__text">{{if .Marked}}{{template "pieces" .Marked}}{{else}}{{.Text}}{{end}}</div>{{end}}
+{{if .Quote}}<details class="quote"><summary>Show quoted text</summary><div class="quote__text">{{with .Lead}}{{.}}
+{{end}}{{.Quote}}</div></details>{{end}}
+{{range .Files}}<div class="mfile"><svg class="mfile__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.5 8.5a5 5 0 01-7-7L14 4.5a3.5 3.5 0 015 5L10.5 18a2 2 0 01-3-3L15 7.5"/></svg><span class="mfile__text"><span class="mfile__name">{{.Name}}</span><span class="mfile__detail">{{.Detail}}</span></span>{{if or (eq .Mode "file") (eq .Mode "image") (eq .Mode "audio") (eq .Mode "video")}}<a class="button" href="{{.URL}}">Open</a>{{else if or (eq .Mode "skipped") (eq .Mode "failed") (eq .Mode "pending")}}<form method="post" action="{{.URL}}/fetch"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="back" value="{{$.Thread.Self}}"><button class="button" type="submit">{{if eq .Mode "failed"}}Try again{{else}}Fetch now{{end}}</button></form>{{end}}</div>
+{{end}}{{with .OriginalHref}}<p class="mcard__original"><a href="{{.}}">Download original (.eml)</a></p>{{end}}
+</div>
+</details>
+{{end}}</div>
+</div>{{end}}{{end}}

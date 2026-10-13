@@ -30,6 +30,7 @@ func talk(t *testing.T, n int) (*site, int64, string, []int64) {
 }
 
 func TestConversationShowsTheNewestMessages(t *testing.T) {
+	t.Parallel()
 	s, acc, path, ids := talk(t, 70)
 	body := s.page(path)
 	has(t, body, "<h1>Dan Whitfield</h1>", "Private chat on Telegram, 70 messages since September 2026",
@@ -40,6 +41,7 @@ func TestConversationShowsTheNewestMessages(t *testing.T) {
 }
 
 func TestConversationPaging(t *testing.T) {
+	t.Parallel()
 	s, _, path, ids := talk(t, 70)
 
 	older := s.page(fmt.Sprintf("%s?before=%d", path, ids[10]))
@@ -58,6 +60,7 @@ func TestConversationPaging(t *testing.T) {
 
 // Review Focus 4: paging edges.
 func TestConversationEdges(t *testing.T) {
+	t.Parallel()
 	s, acc, path, _ := talk(t, 1)
 	other := s.say(acc, "Someone else", "1", "in another chat", noon)
 
@@ -88,6 +91,7 @@ func TestConversationEdges(t *testing.T) {
 
 // Review Focus 1: hostile content appears as text.
 func TestHostileContentIsShownAsText(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account(`<b>Personal</b>`, "telegram")
@@ -119,6 +123,7 @@ func TestHostileContentIsShownAsText(t *testing.T) {
 }
 
 func TestMessageDetails(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account("Personal", "telegram")
@@ -152,6 +157,7 @@ func TestMessageDetails(t *testing.T) {
 }
 
 func TestAttachmentModes(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account("Personal", "telegram")
@@ -212,6 +218,7 @@ func TestAttachmentModes(t *testing.T) {
 }
 
 func TestYearRail(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account("Personal", "telegram")
@@ -249,6 +256,7 @@ func TestYearRail(t *testing.T) {
 // The page opens where the reader is going: at the newest message, at the
 // top of a page of later messages or of a date, or at the message asked for.
 func TestConversationSaysWhereToScroll(t *testing.T) {
+	t.Parallel()
 	s, _, path, ids := talk(t, 70)
 	for query, want := range map[string]string{
 		"":                                 "end",
@@ -266,6 +274,7 @@ func TestConversationSaysWhereToScroll(t *testing.T) {
 // On a phone the open chat is a screen of its own, as in the approved mockup:
 // the page says so, and the year picker jumps as soon as a year is chosen.
 func TestConversationPageIsItsOwnScreenOnPhones(t *testing.T) {
+	t.Parallel()
 	s, acc, path, _ := talk(t, 3)
 	has(t, s.page(path), `<body class="app app--panes app--open">`,
 		`<form class="jump only-phone" method="get" data-controller="jump">`,
@@ -282,6 +291,7 @@ func TestConversationPageIsItsOwnScreenOnPhones(t *testing.T) {
 
 // The year rail counts and jumps in the time zone dates are shown in.
 func TestRailFollowsTheTimeZone(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	la, err := time.LoadLocation("America/Los_Angeles")
@@ -300,6 +310,7 @@ func TestRailFollowsTheTimeZone(t *testing.T) {
 
 // An edit made on a later day says which day.
 func TestEditedOnAnotherDayShowsTheDay(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account("Personal", "telegram")
@@ -312,6 +323,7 @@ func TestEditedOnAnotherDayShowsTheDay(t *testing.T) {
 // The page tells the scroll controller to keep the newest message in view
 // while pictures above it load.
 func TestScrollControllerFollowsLoadingPictures(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	body := s.get(s.srv.asset("js/scroll_controller.js")).Body.String()
 	if !strings.Contains(body, `addEventListener("load"`) {
@@ -322,6 +334,7 @@ func TestScrollControllerFollowsLoadingPictures(t *testing.T) {
 // The rail reads like the conversation: oldest at the top, newest at the
 // bottom, so it can be read as a scroll bar.
 func TestRailRunsOldestToNewest(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account("Personal", "telegram")
@@ -349,6 +362,7 @@ func TestRailRunsOldestToNewest(t *testing.T) {
 // messages alone, with its own links onward, and forms that return to the
 // conversation rather than to the fragment.
 func TestAPageOfMessagesCanBeLoadedOnItsOwn(t *testing.T) {
+	t.Parallel()
 	s, _, path, ids := talk(t, 70)
 	rec := s.get(fmt.Sprintf("%s?before=%d&part=messages", path, ids[10]))
 	if rec.Code != http.StatusOK || rec.Header().Get("Content-Security-Policy") != csp {
@@ -373,6 +387,7 @@ func TestAPageOfMessagesCanBeLoadedOnItsOwn(t *testing.T) {
 // A fetch form inside a loaded page returns to the conversation, not to the
 // fragment.
 func TestAFragmentsFormsReturnToTheConversation(t *testing.T) {
+	t.Parallel()
 	s, acc, path, ids := talk(t, 70)
 	s.say(acc, "Dan Whitfield", "0", "an early file", noon.Add(-2*time.Hour), func(m *model.Message) {
 		m.Attachments = []model.Attachment{{Kind: model.AttachDocument, FileName: "big.pdf", MimeType: "application/pdf", Size: 10, NoFetch: true, NoFetchReason: "too large"}}
@@ -384,6 +399,7 @@ func TestAFragmentsFormsReturnToTheConversation(t *testing.T) {
 // Opening a chat keeps the chat list where it was, and saving a setting
 // keeps the page where it was: the pages say so to their controllers.
 func TestPagesKeepTheirPlace(t *testing.T) {
+	t.Parallel()
 	s, acc, path, _ := talk(t, 3)
 	has(t, s.page(path), `<aside class="list" id="list" aria-label="Chats" data-controller="list" data-action="click->list#remember">`)
 	has(t, s.page(fmt.Sprintf("/s/%d", acc)), `data-controller="list"`)
@@ -399,6 +415,7 @@ func TestPagesKeepTheirPlace(t *testing.T) {
 // A forward sets its content apart under who wrote it, and a reply quotes
 // what it answers, linking to it.
 func TestForwardsAndRepliesAreMarked(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account("Personal", "telegram")

@@ -329,6 +329,23 @@ func TestDemoCommandAndTheInterface(t *testing.T) {
 	}
 }
 
+func TestEmailIsOfferedAsASource(t *testing.T) {
+	info, ok := connector.Default.Info("email")
+	if !ok || info.Hidden || info.Title != "Email" || info.Display != connector.DisplayMail {
+		t.Fatalf("email = %+v, %v", info, ok)
+	}
+	c, ok := connector.Default.New("email")
+	if !ok {
+		t.Fatal("no email connector")
+	}
+	if _, can := c.(connector.SignOuter); !can {
+		t.Error("the email connector cannot sign out")
+	}
+	if demo, ok := connector.Default.Info("demo-mail"); !ok || !demo.Hidden || demo.Display != connector.DisplayMail {
+		t.Errorf("demo-mail = %+v, %v", demo, ok)
+	}
+}
+
 func TestTelegramIsOfferedAsASource(t *testing.T) {
 	info, ok := connector.Default.Info("telegram")
 	if !ok || info.Hidden || info.Title != "Telegram" || info.Display != connector.DisplayChats {

@@ -22,6 +22,7 @@ func newAuth(t *testing.T, env string) (*auth, *archive.Store) {
 }
 
 func TestPasswordHashing(t *testing.T) {
+	t.Parallel()
 	h, err := hashPassword("correct horse")
 	if err != nil {
 		t.Fatal(err)
@@ -51,6 +52,7 @@ func TestPasswordHashing(t *testing.T) {
 }
 
 func TestSetAndCheckPassword(t *testing.T) {
+	t.Parallel()
 	a, store := newAuth(t, "")
 	if has, err := a.hasPassword(); err != nil || has {
 		t.Fatalf("hasPassword on a new archive = %v, %v", has, err)
@@ -82,6 +84,7 @@ func TestSetAndCheckPassword(t *testing.T) {
 }
 
 func TestEnvironmentPassword(t *testing.T) {
+	t.Parallel()
 	a, store := newAuth(t, "from-env")
 	if has, _ := a.hasPassword(); !has || !a.usesEnv() {
 		t.Fatal("an environment password is not treated as set")
@@ -135,6 +138,7 @@ func TestEnvironmentPassword(t *testing.T) {
 }
 
 func TestThrottle(t *testing.T) {
+	t.Parallel()
 	a, _ := newAuth(t, "")
 	now := time.Unix(1_700_000_000, 0)
 	a.now = func() time.Time { return now }
@@ -169,6 +173,7 @@ func TestThrottle(t *testing.T) {
 }
 
 func TestSessionCookie(t *testing.T) {
+	t.Parallel()
 	a, store := newAuth(t, "")
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/login", nil)
@@ -223,6 +228,7 @@ func TestSessionCookie(t *testing.T) {
 
 // Two first-run forms sent at once cannot both choose the password.
 func TestFirstPasswordIsSetOnce(t *testing.T) {
+	t.Parallel()
 	a, _ := newAuth(t, "")
 	if err := a.setFirstPassword("first horse"); err != nil {
 		t.Fatal(err)

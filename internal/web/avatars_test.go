@@ -51,6 +51,7 @@ func (s *site) picture(acc int64, kind model.AvatarKind, sourceID string, conten
 }
 
 func TestAvatarsAreServed(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account("Personal", "telegram")
@@ -87,6 +88,7 @@ func TestAvatarsAreServed(t *testing.T) {
 }
 
 func TestChatListAndSearchShowPictures(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account("Personal", "telegram")
@@ -106,6 +108,7 @@ func TestChatListAndSearchShowPictures(t *testing.T) {
 }
 
 func TestReplacedMediaShowsWithEarlierVersions(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account("Personal", "telegram")

@@ -1,0 +1,10 @@
+First line
+second line
+
+After one blank line
+
+After many breaks, still one blank line
+A div starts a line
+and text after it too stays inline
+
+Under the rule

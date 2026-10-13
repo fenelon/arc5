@@ -93,6 +93,7 @@ func lacks(t *testing.T, body string, bans ...string) {
 }
 
 func TestHomeOpensTheChats(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	s.account("Personal", "telegram")
@@ -102,6 +103,7 @@ func TestHomeOpensTheChats(t *testing.T) {
 }
 
 func TestChatListShowsLastMessages(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account("Personal", "telegram")
@@ -125,6 +127,7 @@ func TestChatListShowsLastMessages(t *testing.T) {
 }
 
 func TestChatListGrows(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account("Personal", "telegram")
@@ -155,6 +158,7 @@ func TestChatListGrows(t *testing.T) {
 }
 
 func TestPickerListsSourcesByKind(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	personal := s.account("Personal", "telegram")
@@ -182,6 +186,7 @@ func TestPickerListsSourcesByKind(t *testing.T) {
 }
 
 func TestSourceStates(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	ids := map[string]int64{}
@@ -208,6 +213,7 @@ func TestSourceStates(t *testing.T) {
 }
 
 func TestUnknownSourceIs404(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	s.account("Personal", "telegram")
@@ -219,6 +225,7 @@ func TestUnknownSourceIs404(t *testing.T) {
 }
 
 func TestSourceOfAnUnregisteredConnectorStillOpens(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account("Old import", "retired")
@@ -228,6 +235,7 @@ func TestSourceOfAnUnregisteredConnectorStillOpens(t *testing.T) {
 }
 
 func TestSourcePagesNeedASession(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	s.account("Personal", "telegram")

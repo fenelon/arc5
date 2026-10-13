@@ -2,6 +2,7 @@
 package archive
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"errors"
@@ -104,6 +105,57 @@ func (s *Store) Close() error {
 	return errors.Join(s.r.Close(), s.w.Close())
 }
 
+// migrationLimit, when set by a test, stops migrating after that version, so
+// a test can build an archive as an older arc5 left it.
+var migrationLimit int
+
+// foreignKeysOff marks a migration that must run with foreign keys off, such
+// as one that rebuilds a table other tables refer to.
+const foreignKeysOff = "-- arc5: foreign keys off"
+
+// applyMigration runs one migration in a transaction on one connection. A
+// migration marked foreignKeysOff runs with them off and is checked with
+// foreign_key_check before it commits; they are switched on again after.
+func (s *Store) applyMigration(version int, body string) (err error) {
+	ctx := context.Background()
+	conn, err := s.w.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if strings.HasPrefix(body, foreignKeysOff) {
+		if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+			return err
+		}
+		defer func() {
+			if _, onErr := conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err == nil {
+				err = onErr
+			}
+		}()
+	}
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(body); err != nil {
+		return err
+	}
+	rows, err := tx.Query(`PRAGMA foreign_key_check`)
+	if err != nil {
+		return err
+	}
+	broken := rows.Next()
+	rows.Close()
+	if broken {
+		return errors.New("it would break foreign keys")
+	}
+	if _, err := tx.Exec(`INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`, version, s.now().Unix()); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) migrate() error {
 	if _, err := s.w.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)`); err != nil {
 		return fmt.Errorf("prepare migrations: %w", err)
@@ -130,23 +182,14 @@ func (s *Store) migrate() error {
 		if applied > 0 {
 			continue
 		}
+		if migrationLimit > 0 && version > migrationLimit {
+			break
+		}
 		body, err := migrationFiles.ReadFile("migrations/" + name)
 		if err != nil {
 			return err
 		}
-		tx, err := s.w.Begin()
-		if err != nil {
-			return err
-		}
-		if _, err := tx.Exec(string(body)); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("migration %s: %w", name, err)
-		}
-		if _, err := tx.Exec(`INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`, version, s.now().Unix()); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("migration %s: %w", name, err)
-		}
-		if err := tx.Commit(); err != nil {
+		if err := s.applyMigration(version, string(body)); err != nil {
 			return fmt.Errorf("migration %s: %w", name, err)
 		}
 	}

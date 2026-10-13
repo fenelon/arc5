@@ -38,6 +38,7 @@ func storeFiles(t *testing.T, s *site, stored int, attachments ...model.Attachme
 }
 
 func TestMediaIsServedToTheOwnerOnly(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	ids := storeFiles(t, s, 1, model.Attachment{Kind: model.AttachPhoto, FileName: "plan.jpg", MimeType: "image/jpeg", Size: 9})
@@ -78,6 +79,7 @@ func TestMediaIsServedToTheOwnerOnly(t *testing.T) {
 
 // Review Focus 5: files that can carry script are downloads, never pages.
 func TestDangerousTypesAreDownloads(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	ids := storeFiles(t, s, 4,
@@ -105,6 +107,7 @@ func TestDangerousTypesAreDownloads(t *testing.T) {
 }
 
 func TestMediaThatIsNotStored(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	ids := storeFiles(t, s, 0, model.Attachment{Kind: model.AttachDocument, FileName: "waiting.bin", Size: 9})
@@ -116,6 +119,7 @@ func TestMediaThatIsNotStored(t *testing.T) {
 }
 
 func TestFetchNow(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	ids := storeFiles(t, s, 0, model.Attachment{Kind: model.AttachVideo, FileName: "big.mp4", Size: 9})
@@ -161,6 +165,7 @@ func TestFetchNow(t *testing.T) {
 // View-once media is fetched only by a source set to keep it; the owner
 // cannot ask for it afterwards, so nothing reports it as opened.
 func TestFetchRefusesWithheldViewOnceMedia(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	ids := storeFiles(t, s, 0, model.Attachment{Kind: model.AttachPhoto, FileName: "once.jpg", Size: 9, Ephemeral: true, NoFetch: true, NoFetchReason: "self-destructing media is not archived"})
@@ -170,6 +175,7 @@ func TestFetchRefusesWithheldViewOnceMedia(t *testing.T) {
 }
 
 func TestMissingFileIs404(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	ids := storeFiles(t, s, 1, model.Attachment{Kind: model.AttachPhoto, FileName: "plan.jpg", MimeType: "image/jpeg", Size: 9})

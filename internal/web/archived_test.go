@@ -12,6 +12,7 @@ import (
 )
 
 func TestChooseArchivedChats(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.fakeAccount("Personal")

@@ -69,7 +69,13 @@ type site struct {
 
 func newSite(t *testing.T, envPassword string) *site {
 	t.Helper()
-	store, err := archive.Open(t.TempDir())
+	return newSiteIn(t, t.TempDir(), envPassword)
+}
+
+// newSiteIn is a site over the data folder dir, which may hold an archive.
+func newSiteIn(t *testing.T, dir, envPassword string) *site {
+	t.Helper()
+	store, err := archive.Open(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,16 +137,50 @@ func (s *site) post(path string, form url.Values) *httptest.ResponseRecorder {
 
 const testPassword = "correct horse"
 
-// signIn sets the password on a new archive and leaves the site signed in.
+// testHash is testPassword's hash, made once: hashing costs a second on
+// purpose, and most tests only need to be signed in.
+var testHash = sync.OnceValues(func() (string, error) { return hashPassword(testPassword) })
+
+// signIn sets the password on a new archive and leaves the site signed in,
+// by storing the password's hash and a session as /setup would.
+// TestSetupSignsIn goes through /setup itself.
 func (s *site) signIn() {
 	s.t.Helper()
+	hash, err := testHash()
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	if err := s.store.SetSetting(passwordKey, hash); err != nil {
+		s.t.Fatal(err)
+	}
+	token, err := randomToken()
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	csrf, err := randomToken()
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	if err := s.store.CreateSession(tokenHash(token), csrf, time.Now().Add(sessionLifetime)); err != nil {
+		s.t.Fatal(err)
+	}
+	s.cookies[sessionCookie] = &http.Cookie{Name: sessionCookie, Value: token}
+	s.csrf = csrf
+}
+
+func TestSetupSignsIn(t *testing.T) {
+	t.Parallel()
+	s := newSite(t, "")
 	rec := s.post("/setup", url.Values{"password": {testPassword}, "password_again": {testPassword}})
 	if rec.Code != http.StatusSeeOther {
-		s.t.Fatalf("setup: status %d, body %s", rec.Code, rec.Body)
+		t.Fatalf("setup: status %d, body %s", rec.Code, rec.Body)
 	}
 	s.get("/") // pick up the CSRF token from a page
 	if s.csrf == "" {
-		s.t.Fatal("no CSRF token on the home page")
+		t.Fatal("no CSRF token on the home page")
+	}
+	if rec := s.get("/settings"); rec.Code != http.StatusOK {
+		t.Errorf("signed in by /setup, settings: %d", rec.Code)
 	}
 }
 
@@ -149,6 +189,7 @@ func redirectsTo(rec *httptest.ResponseRecorder, path string) bool {
 }
 
 func TestHealthIsPublic(t *testing.T) {
+	t.Parallel()
 	rec := newSite(t, "").get("/healthz")
 	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"status":"ok"}` {
 		t.Fatalf("healthz = %d %q", rec.Code, rec.Body)
@@ -156,6 +197,7 @@ func TestHealthIsPublic(t *testing.T) {
 }
 
 func TestStaticFiles(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	css := s.get(s.srv.asset("app.css"))
 	if css.Code != http.StatusOK || !strings.HasPrefix(css.Header().Get("Content-Type"), "text/css") ||
@@ -176,6 +218,7 @@ func TestStaticFiles(t *testing.T) {
 }
 
 func TestFirstRunSetup(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	for _, path := range []string{"/", "/login"} {
 		if rec := s.get(path); !redirectsTo(rec, "/setup") {
@@ -211,6 +254,7 @@ func TestFirstRunSetup(t *testing.T) {
 
 // Review Focus 3: setup cannot be replayed.
 func TestSetupIsClosedOnceAPasswordExists(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	stranger := &site{t: t, store: s.store, srv: s.srv, cookies: map[string]*http.Cookie{}}
@@ -235,6 +279,7 @@ func TestSetupIsClosedOnceAPasswordExists(t *testing.T) {
 }
 
 func TestLoginAndLogout(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	if rec := s.post("/logout", nil); !redirectsTo(rec, "/login") {
@@ -259,6 +304,7 @@ func TestLoginAndLogout(t *testing.T) {
 }
 
 func TestLoginIsThrottled(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "from-env")
 	for range 5 {
 		s.post("/login", url.Values{"password": {"wrong"}})
@@ -274,6 +320,7 @@ func TestLoginIsThrottled(t *testing.T) {
 
 // Review Focus 2: no page without a session, no change without the CSRF token.
 func TestPagesNeedASessionAndPostsNeedTheToken(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	token := s.csrf
@@ -297,6 +344,7 @@ func TestPagesNeedASessionAndPostsNeedTheToken(t *testing.T) {
 }
 
 func TestPagesCarryThemeAndHeaders(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	plain := s.get("/")
@@ -328,6 +376,7 @@ func TestPagesCarryThemeAndHeaders(t *testing.T) {
 // Wrong passwords sent all at once are checked one at a time, so the throttle
 // holds and the server never runs many password checks side by side.
 func TestParallelLoginsAreThrottled(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	const tries = 40
@@ -365,6 +414,7 @@ func TestParallelLoginsAreThrottled(t *testing.T) {
 // Review Focus 2, for every route: no page without a session, and no change
 // without the session's token.
 func TestEveryRouteNeedsASessionAndEveryChangeTheToken(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.fakeAccount("Personal")
