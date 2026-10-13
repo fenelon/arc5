@@ -17,6 +17,8 @@ import (
 
 	"github.com/fenelon/arc5/internal/archive"
 	"github.com/fenelon/arc5/internal/connector"
+	"github.com/fenelon/arc5/internal/indexer"
+	"github.com/fenelon/arc5/internal/search"
 )
 
 //go:embed static templates
@@ -25,6 +27,14 @@ var files embed.FS
 // csp lets a page load scripts, styles, fonts and media from arc5 only, and
 // nothing inline. Message text can never run as code.
 const csp = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+
+// Index is what the interface needs from the search index: a searcher, the
+// state of the index, and a way to change its languages.
+type Index interface {
+	Searcher() *search.Searcher
+	Status() indexer.Status
+	SetLanguages(codes []string) error
+}
 
 // Runner is what the interface needs from the connector runner.
 type Runner interface {
@@ -36,6 +46,7 @@ type Deps struct {
 	Store       *archive.Store
 	Runner      Runner
 	Registry    *connector.Registry
+	Index       Index
 	EnvPassword string           // ARC5_PASSWORD; empty lets the owner choose one
 	Now         func() time.Time // defaults to time.Now
 	Location    *time.Location   // times are shown in this zone; defaults to time.Local
@@ -51,6 +62,9 @@ type Server struct {
 }
 
 func New(deps Deps) (*Server, error) {
+	if deps.Store == nil || deps.Runner == nil || deps.Registry == nil || deps.Index == nil {
+		return nil, errors.New("web: Deps needs a store, a runner, a registry and an index")
+	}
 	if deps.Now == nil {
 		deps.Now = time.Now
 	}
@@ -91,6 +105,11 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /s/{source}", s.signedIn(s.sourceView))
 	s.mux.Handle("GET /s/{source}/c/{chat}", s.signedIn(s.conversationView))
 	s.mux.Handle("GET /sources", s.signedIn(s.sourcesList))
+	s.mux.Handle("GET /settings", s.signedIn(s.settings))
+	s.mux.Handle("POST /settings/appearance", s.signedIn(s.saveAppearance))
+	s.mux.Handle("POST /settings/languages", s.signedIn(s.saveLanguages))
+	s.mux.Handle("POST /settings/attachments", s.signedIn(s.saveAttachments))
+	s.mux.Handle("POST /settings/password", s.signedIn(s.savePassword))
 	s.mux.Handle("GET /media/{id}", s.signedIn(s.serveMedia))
 	s.mux.Handle("POST /media/{id}/fetch", s.signedIn(s.fetchMedia))
 }
@@ -232,5 +251,35 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request, sess archive.Sessi
 		s.render(w, http.StatusOK, "empty", s.page(r, sess, "Welcome"))
 		return
 	}
+	all, err := s.sources()
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	if key := s.remembered(r, all); key != "" {
+		redirect(w, r, "/s/"+key)
+		return
+	}
 	redirect(w, r, "/s/chats")
+}
+
+// sourceCookie remembers the last source the owner opened, so home, Sources
+// and Settings come back to it.
+const sourceCookie = "arc5_source"
+
+func remember(w http.ResponseWriter, r *http.Request, key string) {
+	http.SetCookie(w, &http.Cookie{Name: sourceCookie, Value: key, Path: "/", MaxAge: 365 * 24 * 3600,
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: isSecure(r)})
+}
+
+// remembered is the last source opened, if it still exists.
+func (s *Server) remembered(r *http.Request, all []source) string {
+	c, err := r.Cookie(sourceCookie)
+	if err != nil {
+		return ""
+	}
+	if _, ok := s.selection(c.Value, all); !ok {
+		return ""
+	}
+	return c.Value
 }

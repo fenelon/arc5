@@ -107,7 +107,7 @@ func serve(ctx context.Context, cfg config.Config, ready func(addr string)) erro
 		return err
 	}
 
-	site, err := web.New(web.Deps{Store: store, Runner: runner, Registry: connector.Default, EnvPassword: cfg.Password})
+	site, err := web.New(web.Deps{Store: store, Runner: runner, Registry: connector.Default, Index: index, EnvPassword: cfg.Password})
 	if err != nil {
 		ln.Close()
 		return err

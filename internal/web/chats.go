@@ -145,6 +145,7 @@ func (s *Server) sourceShell(w http.ResponseWriter, r *http.Request, sess archiv
 		s.fail(w, err)
 		return sourcePage{}, selection{}, false
 	}
+	remember(w, r, sel.Key)
 	data := sourcePage{Page: s.chrome(r, sess, sel.Name, all, sel.Key), Chats: rows}
 	if more {
 		data.MoreChatsHref = fmt.Sprintf("%s?chats=%d", r.URL.Path, count+chatsPerPage)

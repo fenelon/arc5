@@ -153,6 +153,9 @@ func (s *Server) chrome(r *http.Request, sess archive.Session, title string, all
 	if len(all) == 0 {
 		return p
 	}
+	if current == "" {
+		current = s.remembered(r, all)
+	}
 	picker := &Picker{}
 	for _, k := range kinds {
 		var tiles []Tile

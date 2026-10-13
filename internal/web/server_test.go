@@ -12,6 +12,7 @@ import (
 
 	"github.com/fenelon/arc5/internal/archive"
 	"github.com/fenelon/arc5/internal/connector"
+	"github.com/fenelon/arc5/internal/indexer"
 )
 
 type fakeRunner struct {
@@ -33,6 +34,7 @@ type site struct {
 	store   *archive.Store
 	runner  *fakeRunner
 	reg     *connector.Registry
+	index   *indexer.Indexer
 	srv     *Server
 	cookies map[string]*http.Cookie
 	csrf    string
@@ -45,15 +47,21 @@ func newSite(t *testing.T, envPassword string) *site {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Close() })
-	s := &site{t: t, store: store, runner: &fakeRunner{}, reg: connector.NewRegistry(), cookies: map[string]*http.Cookie{}}
-	s.srv, err = New(Deps{Store: store, Runner: s.runner, Registry: s.reg, EnvPassword: envPassword, Location: time.UTC})
+	index, err := indexer.Load(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index.Logf = func(string, ...any) {}
+	t.Cleanup(index.Wait) // registered after the store's cleanup, so it runs first
+	s := &site{t: t, store: store, runner: &fakeRunner{}, reg: connector.NewRegistry(), index: index, cookies: map[string]*http.Cookie{}}
+	s.srv, err = New(Deps{Store: store, Runner: s.runner, Registry: s.reg, Index: index, EnvPassword: envPassword, Location: time.UTC})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return s
 }
 
-var csrfField = regexp.MustCompile(`name="csrf" value="([^"]+)"`)
+var csrfField = regexp.MustCompile(`name="csrf" (?:value|content)="([^"]+)"`)
 
 func (s *site) do(req *http.Request) *httptest.ResponseRecorder {
 	s.t.Helper()

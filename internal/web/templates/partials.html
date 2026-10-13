@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} - arc5</title>
-<link rel="stylesheet" href="{{asset "app.css"}}">
+{{if .CSRF}}<meta name="csrf" content="{{.CSRF}}">
+{{end}}<link rel="stylesheet" href="{{asset "app.css"}}">
 <script type="module" src="{{asset "js/app.js"}}"></script>
 </head>
 {{end}}
@@ -30,8 +31,8 @@
 {{template "brand"}}
 {{if .Picker}}{{template "picker" .Picker}}{{end}}
 <span class="topbar__space"></span>
-<button class="icon-button" type="button" data-controller="theme" data-action="theme#toggle" aria-label="Switch between the light and dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/></svg></button>
-<form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link-button" type="submit">Sign out</button></form>
+<button class="icon-button not-phone" type="button" data-controller="theme" data-action="theme#toggle" aria-label="Switch between the light and dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/></svg></button>
+<a class="settings-link" href="/settings"><svg class="only-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="settings-link__label">Settings</span></a>
 </header>{{end}}
 
 {{define "banner"}}{{if .Alert}}<div class="banner" role="alert"><span><strong>{{.Alert.Name}} is not archiving.</strong> {{.Alert.Detail}}</span><a class="button button--warn" href="/sources">Open sources</a></div>{{end}}{{end}}
