@@ -320,6 +320,63 @@ func TestNewMailAndDeletions(t *testing.T) {
 	}
 }
 
+// cycleOnce runs one capture cycle by hand, without waiting for news.
+func cycleOnce(t *testing.T, r *run) {
+	t.Helper()
+	ctx := context.Background()
+	list, err := r.cl.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var archived []model.Folder
+	for _, f := range captureOrder(folderPlan(list)) {
+		if err := r.sink.UpsertFolder(f); err != nil {
+			t.Fatal(err)
+		}
+		if on, _ := r.sink.FolderArchived(f.SourceID); on {
+			archived = append(archived, f)
+		}
+	}
+	seen := map[string]looked{}
+	for _, f := range archived {
+		l, err := r.newMail(ctx, f.SourceID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen[f.SourceID] = l
+	}
+	for _, f := range archived {
+		if err := r.deletions(ctx, f.SourceID, seen[f.SourceID]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := r.history(ctx, archived); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A deletion in the cycle right after new mail arrived is seen: the count
+// the folder is compared with includes the new mail.
+func TestDeletionRightAfterNewMail(t *testing.T) {
+	a := newArchived(t)
+	srv := newFakeServer("INBOX")
+	srv.add("INBOX", msg("a@x", "a@example.com", "A", "a"), now.Add(-time.Hour))
+	cl, _ := srv.dial(context.Background(), account{Password: "app-password"})
+	c := &Connector{dial: srv.dial, now: func() time.Time { return now }, sleep: func(ctx context.Context, _ time.Duration) error { return ctx.Err() }, slice: time.Hour}
+	r := &run{c: c, cl: cl, sink: a.sink, state: newMemState(), o: options{own: map[string]bool{}}}
+	cycleOnce(t, r) // first sight: history takes in a@x
+	srv.add("INBOX", msg("b@x", "b@example.com", "B", "b"), now)
+	cycleOnce(t, r) // new mail: b@x
+	srv.expunge("INBOX", 1)
+	cycleOnce(t, r) // one fewer than before the new mail: a@x was deleted
+	if !a.deleted(t, "a@x") {
+		t.Error("a deletion right after new mail was missed")
+	}
+	if a.deleted(t, "b@x") {
+		t.Error("the new mail is marked deleted")
+	}
+}
+
 func TestUIDValidityChange(t *testing.T) {
 	a := newArchived(t)
 	srv := newFakeServer("INBOX")

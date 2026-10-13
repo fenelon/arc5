@@ -219,7 +219,11 @@ func (r *run) deletions(ctx context.Context, folder string, l looked) error {
 		return err
 	}
 	if l.messages == cp.Exists+uint32(l.added) {
-		return nil
+		if l.added == 0 {
+			return nil
+		}
+		cp.Exists = l.messages // the new mail is now part of the count to compare with
+		return r.save(folder, cp)
 	}
 	if _, err := r.cl.Select(ctx, folder); err != nil {
 		return err
