@@ -49,6 +49,37 @@ type Message struct {
 	Versions      []Version
 	Replaced      []ReplacedFile // media edits replaced, oldest first
 	Attachments   []Attachment
+	Reply         *Reply // what it replies to, or nil
+}
+
+// Reply is what a reply answers, as a quote above it. Missing says it
+// answers a message the archive does not have; Href is "" then.
+type Reply struct {
+	Href, Name, Text string
+	Missing          bool
+}
+
+// quoteText is how a quoted message reads in one line: its text, or what it
+// carried.
+func quoteText(q *archive.Quote) string {
+	if text := strings.TrimSpace(q.Text); text != "" {
+		return text
+	}
+	switch q.FileKind {
+	case model.AttachPhoto:
+		return "Photo"
+	case model.AttachVideo:
+		return "Video"
+	case model.AttachVoice:
+		return "Voice message"
+	case model.AttachAudio:
+		return "Audio: " + q.File
+	case model.AttachSticker:
+		return "Sticker"
+	case "":
+		return "Message"
+	}
+	return "File: " + q.File
 }
 
 // ReplacedFile is an attachment an edit replaced. URL is "" when the file
@@ -324,6 +355,10 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 	}
 	conv.Years, conv.YearOptions = rail(path, keep, quarters, reading.In(s.deps.Location))
 
+	onPage := map[int64]bool{}
+	for _, m := range window.Messages {
+		onPage[m.ID] = true
+	}
 	for _, m := range window.Messages {
 		sent := m.SentAt.In(s.deps.Location)
 		label := sent.Format("Monday, 2 January 2006")
@@ -369,6 +404,25 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 		}
 		for _, a := range m.Replaced {
 			v.Replaced = append(v.Replaced, replacedView(a, s.deps.Location))
+		}
+		switch q := m.Reply; {
+		case q != nil:
+			name := q.ForwardedFrom
+			switch {
+			case name != "":
+			case q.Outgoing:
+				name = "You"
+			case q.SenderName != "":
+				name = q.SenderName
+			default:
+				name = chat.Title
+			}
+			v.Reply = &Reply{Href: fmt.Sprintf("%s?at=%d%s", path, q.ID, keep), Name: name, Text: quoteText(q)}
+			if onPage[q.ID] {
+				v.Reply.Href = fmt.Sprintf("#m%d", q.ID)
+			}
+		case m.ReplyToSourceID != "":
+			v.Reply = &Reply{Missing: true}
 		}
 		day := &conv.Days[len(conv.Days)-1]
 		day.Messages = append(day.Messages, v)

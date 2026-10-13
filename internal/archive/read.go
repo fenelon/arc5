@@ -129,6 +129,18 @@ type MessageView struct {
 	Replaced        []StoredAttachment // attachments edits replaced, oldest first
 	SenderID        int64              // zero when the source named no sender
 	SenderAvatarSHA string             // the sender's picture in the media store, or ""
+	Reply           *Quote             // what it replies to, when that is archived in the same chat
+}
+
+// Quote is the message a reply answers, as the reply shows it.
+type Quote struct {
+	ID            int64
+	SenderName    string
+	ForwardedFrom string // who wrote it, when it was itself a forward
+	Outgoing      bool
+	Text          string
+	File          string               // its first attachment's name, or ""
+	FileKind      model.AttachmentKind // and kind
 }
 
 // Anchor says which part of a conversation to read. At most one field is set;
@@ -155,13 +167,24 @@ const messageViewSelect = `
 	FROM messages m LEFT JOIN senders sn ON sn.id = m.sender_id
 	WHERE m.chat_id = ?`
 
+// A conversation is ordered by when each message was sent, then, within a
+// second, by its source ID (numbers compare as numbers: shorter first), then
+// by when it was stored. A batch of forwards shares a second, and the
+// catch-up stores newest first, so the database ID alone would reverse it.
+const position = `(m.sent_at, length(m.source_id), m.source_id, m.id)`
+
 // pivot is the position of an anchor message, if it belongs to the chat being
-// read. A message of another chat, or none, compares as NULL and matches nothing.
-const pivot = `(SELECT p.sent_at, p.id FROM messages p WHERE p.id = ? AND p.chat_id = m.chat_id)`
+// read. A message of another chat, or none, compares as NULL and matches
+// nothing. Each use also bounds sent_at, so the chat's index narrows the scan.
+func pivot(op string) string {
+	bound := op[:1] + "=" // "<" and "<=" bound sent_at by "<="; ">" by ">="
+	return ` AND m.sent_at ` + bound + ` (SELECT p.sent_at FROM messages p WHERE p.id = ? AND p.chat_id = m.chat_id)` +
+		` AND ` + position + ` ` + op + ` (SELECT p.sent_at, length(p.source_id), p.source_id, p.id FROM messages p WHERE p.id = ? AND p.chat_id = m.chat_id)`
+}
 
 const (
-	newestFirst = ` ORDER BY m.sent_at DESC, m.id DESC LIMIT ?`
-	oldestFirst = ` ORDER BY m.sent_at ASC, m.id ASC LIMIT ?`
+	newestFirst = ` ORDER BY m.sent_at DESC, length(m.source_id) DESC, m.source_id DESC, m.id DESC LIMIT ?`
+	oldestFirst = ` ORDER BY m.sent_at ASC, length(m.source_id) ASC, m.source_id ASC, m.id ASC LIMIT ?`
 )
 
 func (s *Store) views(query string, args ...any) ([]MessageView, error) {
@@ -208,7 +231,7 @@ func (s *Store) ChatMessages(chatID int64, a Anchor, limit int) (Window, error) 
 	)
 	switch {
 	case a.Before != 0:
-		w.Messages, err = s.views(messageViewSelect+` AND (m.sent_at, m.id) < `+pivot+newestFirst, chatID, a.Before, limit+1)
+		w.Messages, err = s.views(messageViewSelect+pivot("<")+newestFirst, chatID, a.Before, a.Before, limit+1)
 		if err != nil {
 			return Window{}, err
 		}
@@ -217,7 +240,7 @@ func (s *Store) ChatMessages(chatID int64, a Anchor, limit int) (Window, error) 
 		w.HasNewer = len(w.Messages) > 0 // the anchor itself is newer
 
 	case a.After != 0:
-		w.Messages, err = s.views(messageViewSelect+` AND (m.sent_at, m.id) > `+pivot+oldestFirst, chatID, a.After, limit+1)
+		w.Messages, err = s.views(messageViewSelect+pivot(">")+oldestFirst, chatID, a.After, a.After, limit+1)
 		if err != nil {
 			return Window{}, err
 		}
@@ -226,14 +249,14 @@ func (s *Store) ChatMessages(chatID int64, a Anchor, limit int) (Window, error) 
 
 	case a.Around != 0:
 		older := limit / 2 // messages shown before the anchor
-		before, err := s.views(messageViewSelect+` AND (m.sent_at, m.id) <= `+pivot+newestFirst, chatID, a.Around, older+2)
+		before, err := s.views(messageViewSelect+pivot("<=")+newestFirst, chatID, a.Around, a.Around, older+2)
 		if err != nil {
 			return Window{}, err
 		}
 		w.HasOlder = trim(&before, older+1)
 		slices.Reverse(before)
 		newer := max(limit-older-1, 0)
-		after, err := s.views(messageViewSelect+` AND (m.sent_at, m.id) > `+pivot+oldestFirst, chatID, a.Around, newer+1)
+		after, err := s.views(messageViewSelect+pivot(">")+oldestFirst, chatID, a.Around, a.Around, newer+1)
 		if err != nil {
 			return Window{}, err
 		}
@@ -262,7 +285,54 @@ func (s *Store) ChatMessages(chatID int64, a Anchor, limit int) (Window, error) 
 		w.HasOlder = trim(&w.Messages, limit)
 		slices.Reverse(w.Messages)
 	}
-	return w, s.attach(w.Messages)
+	if err := s.attach(w.Messages); err != nil {
+		return Window{}, err
+	}
+	return w, s.quote(chatID, w.Messages)
+}
+
+// quote fills in what each reply answers, from the same chat.
+func (s *Store) quote(chatID int64, messages []MessageView) error {
+	var wanted []any
+	for _, m := range messages {
+		if m.ReplyToSourceID != "" {
+			wanted = append(wanted, m.ReplyToSourceID)
+		}
+	}
+	if len(wanted) == 0 {
+		return nil
+	}
+	rows, err := s.r.Query(`
+		SELECT m.id, m.source_id, m.outgoing, COALESCE(sn.display_name, ''), m.forwarded_from, m.text,
+		       COALESCE(a.file_name, ''), COALESCE(a.kind, '')
+		FROM messages m LEFT JOIN senders sn ON sn.id = m.sender_id
+		LEFT JOIN attachments a ON a.id = (SELECT f.id FROM attachments f WHERE f.message_id = m.id AND f.position >= 0 ORDER BY f.position LIMIT 1)
+		WHERE m.chat_id = ? AND m.source_id IN (`+placeholders(len(wanted))+`)`, append([]any{chatID}, wanted...)...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	found := map[string]*Quote{}
+	for rows.Next() {
+		var (
+			q        Quote
+			source   string
+			outgoing int
+			kind     string
+		)
+		if err := rows.Scan(&q.ID, &source, &outgoing, &q.SenderName, &q.ForwardedFrom, &q.Text, &q.File, &kind); err != nil {
+			return err
+		}
+		q.Outgoing, q.FileKind = outgoing != 0, model.AttachmentKind(kind)
+		found[source] = &q
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i := range messages {
+		messages[i].Reply = found[messages[i].ReplyToSourceID]
+	}
+	return nil
 }
 
 // attach fills in the attachments of each message, current and replaced.

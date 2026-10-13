@@ -143,7 +143,7 @@ func TestMessageDetails(t *testing.T) {
 	body := s.page(fmt.Sprintf("/s/%d/c/%d", acc, s.chatID(acc, "Flat")))
 	has(t, body, "Group on Telegram, 5 messages since September 2026",
 		`<div class="msg__sender">Dan</div>`, "Room 4 from ten.", "Edited at 12:04, show earlier", "Room 2 from ten.",
-		"Forwarded from Priya", "Deleted at source on", `class="msg msg--out"`, "On my way",
+		`Forwarded from <span class="fwd__name">Priya</span>`, "Deleted at source on", `class="msg msg--out"`, "On my way",
 		`<p class="service"`, "Dan pinned a message", "line one\nline two",
 		"Monday, 28 September 2026", "Tuesday, 29 September 2026")
 	if strings.Count(body, `<div class="msg__sender">`) != 3 {
@@ -394,4 +394,29 @@ func TestPagesKeepTheirPlace(t *testing.T) {
 			t.Errorf("%s: %d", js, rec.Code)
 		}
 	}
+}
+
+// A forward sets its content apart under who wrote it, and a reply quotes
+// what it answers, linking to it.
+func TestForwardsAndRepliesAreMarked(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	acc := s.account("Personal", "telegram")
+	if err := s.store.UpsertSender(acc, model.Sender{SourceID: "anton", DisplayName: "Anton U"}); err != nil {
+		t.Fatal(err)
+	}
+	question := s.say(acc, "Infra", "1", "Where are the copies kept?", noon, func(m *model.Message) { m.SenderSourceID = "anton" })
+	s.say(acc, "Infra", "2", "Everything is geo-replicated", noon.Add(time.Minute), func(m *model.Message) {
+		m.ForwardedFrom, m.ReplyToSourceID = "Mikhail", "1"
+	})
+	s.say(acc, "Infra", "3", "a photo answer", noon.Add(2*time.Minute), func(m *model.Message) {
+		m.Outgoing, m.ReplyToSourceID = true, "2"
+	})
+	s.say(acc, "Infra", "4", "about something older", noon.Add(3*time.Minute), func(m *model.Message) { m.ReplyToSourceID = "999" })
+	body := s.page(fmt.Sprintf("/s/%d/c/%d", acc, s.chatID(acc, "Infra")))
+	has(t, body,
+		`<div class="fwd"><div class="fwd__head">Forwarded from <span class="fwd__name">Mikhail</span></div>`,
+		fmt.Sprintf(`<a class="quote" href="#m%d"><span class="quote__name">Anton U</span><span class="quote__text">Where are the copies kept?</span></a>`, question),
+		`<span class="quote__name">Mikhail</span><span class="quote__text">Everything is geo-replicated</span>`,
+		`<p class="quote quote--missing">Reply to a message not in the archive</p>`)
 }

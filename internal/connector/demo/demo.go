@@ -208,11 +208,14 @@ func Seed(store *archive.Store) (bool, error) {
 	b.put(model.Message{ChatSourceID: "dan", SourceID: b.next(), Kind: model.KindService, SentAt: at(1, 18, 42), Text: "Dan Whitfield pinned a message"})
 	gone := b.say("dan", "dan", at(0, 10, 2), "Marina's flight lands at 18:40. Can you pick her up, or should I book a taxi?", false)
 	b.do(store.MarkDeleted(acc, "dan", []string{gone.SourceID}))
-	b.say("dan", "", at(0, 10, 5), "I'll get her. Terminal 1?", true)
+	pickup := b.message("dan", "", at(0, 10, 5), "I'll get her. Terminal 1?", true)
+	pickup.ReplyToSourceID = gone.SourceID
+	b.put(pickup)
 	voice := b.message("dan", "dan", at(0, 10, 7), "", false)
 	voice.Attachments = []model.Attachment{{Kind: model.AttachVoice, FileName: "voice-note.ogg", MimeType: "audio/ogg", Size: 61_000, NoFetch: true, NoFetchReason: "the demo archive has no audio"}}
 	b.put(voice)
 	video := b.message("dan", "dan", at(0, 10, 15), "And this is the route from arrivals, in case the signs are down again.", false)
+	video.ForwardedFrom = "Heathrow Airport"
 	video.Attachments = []model.Attachment{{Kind: model.AttachVideo, FileName: "arrivals-walkthrough.mp4", MimeType: "video/mp4", Size: 312 << 20}}
 	b.put(video)
 	once := b.message("dan", "dan", at(0, 10, 16), "", false)

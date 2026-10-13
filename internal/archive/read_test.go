@@ -291,3 +291,81 @@ func TestAttachmentFile(t *testing.T) {
 		t.Errorf("unknown attachment error = %v, want ErrNotFound", err)
 	}
 }
+
+// Messages sent in the same second, such as a batch of forwards, read in the
+// source's order however they were stored: the catch-up stores newest first.
+// Numeric source IDs compare as numbers.
+func TestChatMessagesInTheSameSecondKeepTheSourcesOrder(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	ids := map[string]int64{}
+	for _, src := range []string{"12", "11", "10", "9"} {
+		m := textMsg(src, "message "+src)
+		m.SentAt = t0
+		mustUpsert(t, s, acc, m)
+		ids[src] = mustMessage(t, s, acc, src).ID
+	}
+	later := textMsg("13", "message 13")
+	later.SentAt = t0.Add(time.Minute)
+	mustUpsert(t, s, acc, later)
+	ids["13"] = mustMessage(t, s, acc, "13").ID
+	chat := chatDBID(t, s, acc, "c1")
+
+	for _, c := range []struct {
+		name   string
+		anchor Anchor
+		limit  int
+		want   string
+	}{
+		{"newest", Anchor{}, 50, "9 10 11 12 13"},
+		{"newest two", Anchor{}, 2, "12 13"},
+		{"before 11", Anchor{Before: ids["11"]}, 50, "9 10"},
+		{"after 10", Anchor{After: ids["10"]}, 2, "11 12"},
+		{"around 11", Anchor{Around: ids["11"]}, 3, "10 11 12"},
+		{"from the second", Anchor{From: t0}, 3, "9 10 11"},
+	} {
+		w, err := s.ChatMessages(chat, c.anchor, c.limit)
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if got := texts(w); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// A reply carries what it answers, when that is archived in the same chat.
+func TestChatMessagesQuoteWhatTheyReplyTo(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	first := textMsg("1", "where are the keys?")
+	mustUpsert(t, s, acc, first)
+	photo := textMsg("2", "")
+	photo.SentAt = t0.Add(time.Minute)
+	photo.Attachments = []model.Attachment{{Kind: model.AttachPhoto, FileName: "box.jpg", Size: 1}}
+	mustUpsert(t, s, acc, photo)
+	reply := textMsg("3", "in the box")
+	reply.SentAt, reply.Outgoing, reply.ReplyToSourceID = t0.Add(2*time.Minute), true, "1"
+	mustUpsert(t, s, acc, reply)
+	toPhoto := textMsg("4", "that one")
+	toPhoto.SentAt, toPhoto.ReplyToSourceID = t0.Add(3*time.Minute), "2"
+	mustUpsert(t, s, acc, toPhoto)
+	lost := textMsg("5", "about something older")
+	lost.SentAt, lost.ReplyToSourceID = t0.Add(4*time.Minute), "999"
+	mustUpsert(t, s, acc, lost)
+
+	w, err := s.ChatMessages(chatDBID(t, s, acc, "c1"), Anchor{After: mustMessage(t, s, acc, "2").ID}, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := w.Messages[0].Reply
+	if q == nil || q.ID != mustMessage(t, s, acc, "1").ID || q.SenderName != "Alice" || q.Text != "where are the keys?" || q.Outgoing {
+		t.Errorf("reply to text: %+v", q)
+	}
+	if q := w.Messages[1].Reply; q == nil || q.Text != "" || q.File != "box.jpg" || q.FileKind != model.AttachPhoto {
+		t.Errorf("reply to a photo: %+v", q)
+	}
+	if q := w.Messages[2].Reply; q != nil || w.Messages[2].ReplyToSourceID != "999" {
+		t.Errorf("reply to a message not archived: %+v", q)
+	}
+}
