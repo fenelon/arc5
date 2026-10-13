@@ -2,6 +2,7 @@ package email
 
 import (
 	"context"
+	"errors"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -34,6 +35,43 @@ func selfSigned(t *testing.T) tls.Certificate {
 		t.Fatal(err)
 	}
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}
+}
+
+// Only a refusal of the credentials asks the owner to log in again; a busy
+// or throttling server is tried again later.
+func TestLoginErrors(t *testing.T) {
+	no := func(code imap.ResponseCode, text string) error {
+		return &imap.Error{Type: imap.StatusResponseTypeNo, Code: code, Text: text}
+	}
+	for _, refused := range []error{
+		no(imap.ResponseCodeAuthenticationFailed, "Invalid credentials"),
+		no(imap.ResponseCodeAuthorizationFailed, "Not allowed"),
+		no("", "LOGIN failed"),
+		no(imap.ResponseCodeAlert, "Application-specific password required"),
+		no(imap.ResponseCodeContactAdmin, "Account disabled"),
+		no(imap.ResponseCodeExpired, "Password expired"),
+	} {
+		if err := loginError(refused); !errors.Is(err, errLoginRefused) {
+			t.Errorf("%v: %v, want a refused login", refused, err)
+		}
+	}
+	for _, retry := range []error{
+		no(imap.ResponseCodeUnavailable, "Try again later"),
+		no(imap.ResponseCodeLimit, "Too many logins"),
+		no("THROTTLED", "Slow down"),
+		no(imap.ResponseCodeServerBug, "Oops"),
+		no(imap.ResponseCodeInUse, "Mailbox in use"),
+		no("", "Too many simultaneous connections"),
+		no(imap.ResponseCodeAlert, "Temporary system problem. Try again later"),
+		errors.New("connection reset by peer"),
+	} {
+		if err := loginError(retry); err == nil || errors.Is(err, errLoginRefused) {
+			t.Errorf("%v: %v, want an error to retry", retry, err)
+		}
+	}
+	if loginError(nil) != nil {
+		t.Error("success is an error")
+	}
 }
 
 // A server whose certificate does not verify is refused, before any

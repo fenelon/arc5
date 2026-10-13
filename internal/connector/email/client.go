@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"net/textproto"
 	"sort"
@@ -153,12 +154,29 @@ func (ic *imapClient) watch(ctx context.Context) func() bool {
 
 func (ic *imapClient) login(ctx context.Context, username, password string) error {
 	defer ic.watch(ctx)()
-	err := ic.c.Login(username, password).Wait()
+	return ctxErr(ctx, loginError(ic.c.Login(username, password).Wait()))
+}
+
+// loginError sorts a LOGIN failure: a refusal of the credentials is
+// errLoginRefused, which asks the owner to log in again; a busy, throttling
+// or broken server is an error the runner retries later.
+func loginError(err error) error {
 	var imapErr *imap.Error
-	if errors.As(err, &imapErr) {
-		return errLoginRefused
+	if !errors.As(err, &imapErr) {
+		return err
 	}
-	return ctxErr(ctx, err)
+	text := strings.ToLower(imapErr.Text)
+	for _, passing := range []string{"too many", "try again", "temporar", "throttl", "rate limit", "unavailable", "later"} {
+		if strings.Contains(text, passing) {
+			return fmt.Errorf("the mail server is busy: %s", imapErr.Text)
+		}
+	}
+	switch imapErr.Code {
+	case "", imap.ResponseCodeAlert, imap.ResponseCodeAuthenticationFailed, imap.ResponseCodeAuthorizationFailed,
+		imap.ResponseCodeContactAdmin, imap.ResponseCodeExpired:
+		return fmt.Errorf("%w: %s", errLoginRefused, imapErr.Text)
+	}
+	return fmt.Errorf("the mail server could not log in now: %s", imapErr.Text)
 }
 
 // ctxErr prefers the context's error to the one a closed connection gave.
