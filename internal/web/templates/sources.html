@@ -2,7 +2,7 @@
 <body class="app">
 {{template "topbar" .}}
 {{template "banner" .}}
-<main class="plain plain--wide">
+<main class="plain plain--wide" data-controller="place" data-action="submit->place#remember">
 <div class="page-head"><h1>Sources</h1><a class="button" href="/sources/new"><svg class="button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add a source</a></div>
 {{if eq .Saved "removed"}}<p class="saved" role="status">Removed. Its messages stay in the archive.</p>{{end}}
 <div id="source-tiles" data-controller="progress" data-progress-every-value="5000">
@@ -17,7 +17,7 @@
 </body>
 </html>{{end}}
 
-{{define "source-panel"}}{{$p := .P}}{{$page := .Page}}<section class="panel" aria-labelledby="panel-title">
+{{define "source-panel"}}{{$p := .P}}{{$page := .Page}}<section class="panel" id="panel" aria-labelledby="panel-title">
 <header class="panel__head">{{template "logo" $p.Logo}}<h2 class="panel__title" id="panel-title">Settings for {{$p.Name}}</h2><a class="panel__open" href="{{$p.OpenHref}}">Open its chats</a></header>
 {{if $page.Problem}}<p class="alert panel__note" role="alert">{{$page.Problem}}</p>
 {{else if eq $page.Saved "name" "settings"}}<p class="saved panel__note" role="status">Saved.{{if eq $page.Saved "settings"}} The source starts again with them.{{end}}</p>

@@ -33,7 +33,7 @@ func TestConversationShowsTheNewestMessages(t *testing.T) {
 	s, acc, path, ids := talk(t, 70)
 	body := s.page(path)
 	has(t, body, "<h1>Dan Whitfield</h1>", "Private chat on Telegram, 70 messages since September 2026",
-		"message number 70", "message number 11", `<h2 class="day"><span>Monday, 28 September 2026</span></h2>`,
+		"message number 70", "message number 11", `<h2 class="day" data-day="2026-09-28"><span>Monday, 28 September 2026</span></h2>`,
 		fmt.Sprintf(`href="%s?before=%d"`, path, ids[10]), "Earlier messages",
 		`class="row row--current"`, `<div class="shell shell--open">`, fmt.Sprintf(`href="/s/%d"`, acc))
 	lacks(t, body, "message number 10<", "Later messages", "Choose a chat on the left")
@@ -228,7 +228,7 @@ func TestYearRail(t *testing.T) {
 	path := fmt.Sprintf("/s/%d/c/%d", acc, s.chatID(acc, "Long"))
 
 	body := s.page(path)
-	has(t, body, `<nav class="rail" aria-label="Jump to a quarter">`,
+	has(t, body, `<nav class="rail" aria-label="Jump to a quarter" data-controller="rail">`,
 		`<span class="rail__label">2026</span>`, `<span class="rail__label">2025</span>`, `<span class="rail__label">2024</span>`,
 		fmt.Sprintf(`href="%s?date=2026-07-01"`, path), fmt.Sprintf(`href="%s?date=2024-01-01"`, path),
 		`aria-label="July to September 2026, 8 messages"`, `class="band band--4 band--now"`,
@@ -259,7 +259,7 @@ func TestConversationSaysWhereToScroll(t *testing.T) {
 		"?at=987654":                       "end",
 	} {
 		body := s.page(path + query)
-		has(t, body, fmt.Sprintf(`<div class="messages" data-controller="scroll" data-scroll-to-value="%s">`, want))
+		has(t, body, fmt.Sprintf(`<div class="messages" data-controller="scroll pager" data-scroll-to-value="%s">`, want))
 	}
 }
 
@@ -316,5 +316,82 @@ func TestScrollControllerFollowsLoadingPictures(t *testing.T) {
 	body := s.get(s.srv.asset("js/scroll_controller.js")).Body.String()
 	if !strings.Contains(body, `addEventListener("load"`) {
 		t.Error("the scroll controller does not scroll again when a picture loads")
+	}
+}
+
+// The rail reads like the conversation: oldest at the top, newest at the
+// bottom, so it can be read as a scroll bar.
+func TestRailRunsOldestToNewest(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	acc := s.account("Personal", "telegram")
+	s.say(acc, "Dan", "1", "long ago", time.Date(2024, time.February, 1, 12, 0, 0, 0, time.UTC))
+	s.say(acc, "Dan", "2", "recently", noon)
+	body := s.page(fmt.Sprintf("/s/%d/c/%d", acc, s.chatID(acc, "Dan")))
+	in := func(want string) int {
+		t.Helper()
+		i := strings.Index(body, want)
+		if i < 0 {
+			t.Fatalf("the page lacks %q", want)
+		}
+		return i
+	}
+	if in(`rail__label">2024<`) > in(`rail__label">2025<`) || in(`rail__label">2025<`) > in(`rail__label">2026<`) {
+		t.Error("the rail's years do not run oldest first")
+	}
+	if in(`"January to March 2026`) > in(`"July to September 2026`) {
+		t.Error("a year's quarters do not run oldest first")
+	}
+	has(t, body, `<nav class="rail" aria-label="Jump to a quarter" data-controller="rail">`)
+}
+
+// Scrolling toward either end loads the next page in place: the page's
+// messages alone, with its own links onward, and forms that return to the
+// conversation rather than to the fragment.
+func TestAPageOfMessagesCanBeLoadedOnItsOwn(t *testing.T) {
+	s, _, path, ids := talk(t, 70)
+	rec := s.get(fmt.Sprintf("%s?before=%d&part=messages", path, ids[10]))
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Security-Policy") != csp {
+		t.Fatalf("fragment: %d", rec.Code)
+	}
+	body := rec.Body.String()
+	has(t, body, "message number 10", "message number 1<", `data-day="2026-09-28"`,
+		fmt.Sprintf(`<a class="more" href="%s?after=%d" data-pager-target="newer">Later messages</a>`, path, ids[9]))
+	lacks(t, body, "<html", "<header", "conv-head", "rail", "Earlier messages", "part=messages")
+
+	whole := s.page(path)
+	has(t, whole, fmt.Sprintf(`<a class="more" href="%s?before=%d" data-pager-target="older">Earlier messages</a>`, path, ids[10]),
+		`<h2 class="day" data-day="2026-09-28">`)
+	if rec := s.get(s.srv.asset("js/pager_controller.js")); rec.Code != http.StatusOK {
+		t.Errorf("pager_controller.js: %d", rec.Code)
+	}
+	if rec := s.get(s.srv.asset("js/rail_controller.js")); rec.Code != http.StatusOK {
+		t.Errorf("rail_controller.js: %d", rec.Code)
+	}
+}
+
+// A fetch form inside a loaded page returns to the conversation, not to the
+// fragment.
+func TestAFragmentsFormsReturnToTheConversation(t *testing.T) {
+	s, acc, path, ids := talk(t, 70)
+	s.say(acc, "Dan Whitfield", "0", "an early file", noon.Add(-2*time.Hour), func(m *model.Message) {
+		m.Attachments = []model.Attachment{{Kind: model.AttachDocument, FileName: "big.pdf", MimeType: "application/pdf", Size: 10, NoFetch: true, NoFetchReason: "too large"}}
+	})
+	body := s.get(fmt.Sprintf("%s?before=%d&part=messages", path, ids[10])).Body.String()
+	has(t, body, "big.pdf", fmt.Sprintf(`name="back" value="%s?before=%d"`, path, ids[10]))
+}
+
+// Opening a chat keeps the chat list where it was, and saving a setting
+// keeps the page where it was: the pages say so to their controllers.
+func TestPagesKeepTheirPlace(t *testing.T) {
+	s, acc, path, _ := talk(t, 3)
+	has(t, s.page(path), `<aside class="list" id="list" aria-label="Chats" data-controller="list" data-action="click->list#remember">`)
+	has(t, s.page(fmt.Sprintf("/s/%d", acc)), `data-controller="list"`)
+	has(t, s.page("/settings"), `<main class="plain plain--settings" data-controller="place" data-action="submit->place#remember">`)
+	has(t, s.page(fmt.Sprintf("/sources/%d", acc)), `<main class="plain plain--wide" data-controller="place" data-action="submit->place#remember">`)
+	for _, js := range []string{"js/list_controller.js", "js/place_controller.js"} {
+		if rec := s.get(s.srv.asset(js)); rec.Code != http.StatusOK {
+			t.Errorf("%s: %d", js, rec.Code)
+		}
 	}
 }

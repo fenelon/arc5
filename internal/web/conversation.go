@@ -30,6 +30,7 @@ type Conversation struct {
 
 type Day struct {
 	Label    string
+	Key      string // the date, as 2006-01-02, so pages loaded in place can join a day split between them
 	Messages []Message
 }
 
@@ -183,9 +184,9 @@ func rail(path, keep string, quarters []archive.Quarter, now time.Time) ([]RailY
 	nowYear, nowQuarter := now.Year(), (int(now.Month())+2)/3
 	var years []RailYear
 	var options []YearOption
-	for year := newest; year >= oldest; year-- {
+	for year := oldest; year <= newest; year++ {
 		y := RailYear{Label: strconv.Itoa(year), Now: year == nowYear}
-		for quarter := 4; quarter >= 1; quarter-- {
+		for quarter := 1; quarter <= 4; quarter++ {
 			n := count[[2]int{year, quarter}]
 			level := 0
 			if n > 0 {
@@ -198,7 +199,8 @@ func rail(path, keep string, quarters []archive.Quarter, now time.Time) ([]RailY
 			})
 		}
 		years = append(years, y)
-		options = append(options, YearOption{Value: fmt.Sprintf("%d-01-01", year), Label: y.Label, Current: y.Now})
+		// The phone's year picker lists the newest first, as it opens on them.
+		options = append([]YearOption{{Value: fmt.Sprintf("%d-01-01", year), Label: y.Label, Current: y.Now}}, options...)
 	}
 	return years, options
 }
@@ -275,7 +277,19 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 	path := fmt.Sprintf("/s/%s/c/%d", sel.Key, chatID)
 	q := searchQuery(r)
 	keep := keepQuery(q)
-	conv := &Conversation{Title: chat.Title, BackHref: "/s/" + sel.Key, SelfHref: r.URL.RequestURI()}
+	// part=messages asks for the page's messages alone, loaded in place as
+	// the reader scrolls; forms in it return to the conversation itself.
+	query := r.URL.Query()
+	part := query.Get("part") == "messages"
+	query.Del("part")
+	self := r.URL.RequestURI()
+	if part {
+		self = r.URL.Path
+		if len(query) > 0 {
+			self += "?" + query.Encode()
+		}
+	}
+	conv := &Conversation{Title: chat.Title, BackHref: "/s/" + sel.Key, SelfHref: self}
 	if keep != "" {
 		conv.Query, conv.BackHref = q, "/s/"+sel.Key+"?"+keep[1:]
 	}
@@ -314,7 +328,7 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 		sent := m.SentAt.In(s.deps.Location)
 		label := sent.Format("Monday, 2 January 2006")
 		if len(conv.Days) == 0 || conv.Days[len(conv.Days)-1].Label != label {
-			conv.Days = append(conv.Days, Day{Label: label})
+			conv.Days = append(conv.Days, Day{Label: label, Key: sent.Format(time.DateOnly)})
 		}
 		v := Message{
 			Anchor: fmt.Sprintf("m%d", m.ID), Service: m.Kind == model.KindService, Outgoing: m.Outgoing,
@@ -362,6 +376,10 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 
 	data.Conversation = conv
 	data.Title = chat.Title
+	if part {
+		s.render(w, http.StatusOK, "messages-page", data)
+		return
+	}
 	s.render(w, http.StatusOK, "source", data)
 }
 

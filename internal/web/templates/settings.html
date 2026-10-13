@@ -2,7 +2,7 @@
 <body class="app">
 {{template "topbar" .}}
 {{template "banner" .}}
-<main class="plain plain--settings">
+<main class="plain plain--settings" data-controller="place" data-action="submit->place#remember">
 <h1>Settings</h1>
 
 <section class="card" id="appearance" aria-labelledby="appearance-title">
