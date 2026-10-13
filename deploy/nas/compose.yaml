@@ -1,0 +1,35 @@
+# arc5 on a Synology NAS with Container Manager.
+#
+# 1. Import the image: Container Manager > Image > Add > Add From File, and
+#    choose the arc5 image file built as the README describes.
+# 2. Make a folder for the project, for example docker/arc5 in File Station.
+# 3. Container Manager > Project > Create: name it arc5, pick that folder,
+#    and upload this file. The archive is kept in its "data" subfolder.
+#
+# Then open http://nas:8080 over Tailscale and choose a password.
+
+services:
+  arc5:
+    image: arc5:latest
+    container_name: arc5
+    restart: unless-stopped
+    # DSM governs a shared folder's permissions with its own access lists,
+    # which a user unknown to DSM may not pass. Running as root inside the
+    # container keeps the data folder writable. To run as a DSM user instead,
+    # put its uid:gid here (the first user made on a NAS is usually 1026:100)
+    # and give that user read/write on the project folder.
+    user: "0:0"
+    ports:
+      # Answers on every address of the NAS: the LAN and the tailnet. arc5
+      # asks for its password either way.
+      - "8080:8080"
+    environment:
+      # Times in the archive are shown in this zone.
+      TZ: Europe/Amsterdam
+      # Uncomment to fix the password here instead of choosing it in the
+      # browser on the first visit.
+      # ARC5_PASSWORD: change-me
+    volumes:
+      - ./data:/data
+    # On stop, arc5 finishes what it is writing and closes the archive.
+    stop_grace_period: 30s
