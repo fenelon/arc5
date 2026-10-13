@@ -11,9 +11,10 @@ session.
 | 2. Search engine (analyzer, FTS index, names) | Done, merged. Plan: `plans/2026-10-12-arc5-search.md` |
 | 3a. Web shell and chats view | Done, merged. Plan: `plans/2026-10-13-arc5-web-shell.md` |
 | 3b. Search in the interface, Sources page with setup flows, Settings | Done, merged. Plan: `plans/2026-10-13-arc5-search-sources-settings.md` (its 13 decisions were taken as written) |
-| 4. Telegram connector | Not planned yet; two decisions open (below) |
-| 5. Alerts, `backup`, Docker image, view-once option | Not planned yet |
-| Later | Email connector with the mail layout, then WhatsApp |
+| 4. Telegram connector and avatars | Done, merged, **not yet run against a real Telegram account** (tested against a fake client only). Plan: `plans/2026-10-13-arc5-telegram.md`; its 8 decisions were the executor's calls and await the owner's confirmation |
+| 5. Alerts, `backup`, Docker image, view-once option, the manual Telegram test | Not planned yet |
+| Email connector and the mail layout | **Spec drafted, awaiting the owner's review**: `specs/2026-10-13-email-archive-design.md` (9 decisions listed at its end). Not planned or built |
+| Later | WhatsApp |
 
 `master` is pushed and green: `go vet ./... && go test -race ./...`.
 
@@ -53,18 +54,29 @@ files here.
 - Stack decisions are fixed: Go, no cgo, single binary, SQLite with FTS5,
   server-rendered templates, Stimulus, no inline styles or scripts.
 
-## Decisions needed before the Telegram plan
+## Decisions taken while the owner was away (to confirm)
 
-1. How to record media that an edit replaces. Today a re-sent message keeps
-   its first attachments and ignores new ones at the same position.
-2. How to tell basic groups from supergroups when Telegram reports a deletion
-   without naming the chat.
+The two decisions this file used to list are settled in the Telegram plan:
+media an edit replaces is kept as replaced (attachments carry the source's
+file identity), and Telegram chat source IDs name the type (`user:`,
+`chat:`, `channel:`) so a deletion without a chat only matches private chats
+and basic groups. Chat IDs are stored, so changing their format later needs
+a migration: confirm before adding a real account. The plan's "Decisions for
+the owner to confirm" lists the other six.
 
-Also to confirm by a manual test in milestone 5: downloading self-destructing
-media without calling `messages.readMessageContents` does not start the
-countdown for the other side. The connector must never call that method.
+Still to confirm by the manual test in milestone 5: a first real login and
+backfill; downloading self-destructing media without calling
+`messages.readMessageContents` leaves it unopened for the sender. The
+connector never calls that method (a test enforces it).
 
 ## Known gaps, deferred on purpose
+
+- From the Telegram review (listed in its plan's "Post-review changes"): an
+  update arriving before the signed-in user is known can title Saved
+  Messages with the owner's name until the chat list is read (a data race on
+  `selfID`); picture changes are noticed on the next run; requesting
+  self-destructing media with the setting off says "Telegram no longer has
+  this message"; an unreadable "Since" date means all history.
 
 - A common single-word search ranked by relevance takes about 1 s at one
   million messages.

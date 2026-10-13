@@ -23,7 +23,7 @@
 {{range $m.Attachments}}{{template "attachment" (dict "A" . "CSRF" $.CSRF "Back" $.Back)}}
 {{end}}{{if $m.Text}}<p class="msg__text">{{if $m.Marked}}{{template "pieces" $m.Marked}}{{else}}{{$m.Text}}{{end}}</p>{{end}}
 <div class="msg__meta"><time>{{$m.Time}}</time>{{if $m.Deleted}}<span class="tag tag--warn">Deleted at source on {{$m.Deleted}}</span>{{end}}</div>
-{{if $m.Versions}}<details class="versions"><summary>Edited {{$m.Edited}}, show earlier</summary>{{range $m.Versions}}<p class="versions__item">{{.Text}} <span class="versions__when">until {{.Until}}</span></p>{{end}}</details>{{else if $m.Edited}}<div class="versions">Edited {{$m.Edited}}</div>{{end}}
+{{if or $m.Versions $m.Replaced}}<details class="versions"><summary>Edited{{with $m.Edited}} {{.}}{{end}}, show earlier</summary>{{range $m.Versions}}<p class="versions__item">{{.Text}} <span class="versions__when">until {{.Until}}</span></p>{{end}}{{range $m.Replaced}}<p class="versions__item">Replaced by an edit: {{if .URL}}<a href="{{.URL}}">{{.Name}}</a>{{else}}{{.Name}}{{end}} <span class="versions__when">{{.Detail}}</span></p>{{end}}</details>{{else if $m.Edited}}<div class="versions">Edited {{$m.Edited}}</div>{{end}}
 </article>{{end}}{{end}}
 
 {{define "attachment"}}{{$a := .A}}{{if eq $a.Mode "image"}}<a href="{{$a.URL}}"><img class="media media--image" src="{{$a.URL}}" alt="{{$a.Name}}" loading="lazy"></a>

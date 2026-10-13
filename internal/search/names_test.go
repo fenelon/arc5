@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -194,6 +195,31 @@ func TestNamesKeepToTheChosenAccounts(t *testing.T) {
 		slices.Sort(people)
 		if !slices.Equal(chats, c.chats) || !slices.Equal(people, c.people) {
 			t.Errorf("%s: chats %q, people %q; want %q and %q", name, chats, people, c.chats, c.people)
+		}
+	}
+}
+
+func TestNamesCarryPictures(t *testing.T) {
+	f := namesFixture(t)
+	if err := f.store.PutAvatar(f.acc, model.AvatarRef{Kind: model.AvatarSender, SourceID: "u1", AvatarID: "p1"}, strings.NewReader("picture")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.search.Names(context.Background(), "alice", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pictured int
+	for _, p := range got.People {
+		if p.AvatarSHA != "" {
+			pictured++
+		}
+	}
+	if pictured != 1 {
+		t.Errorf("people with pictures = %d, want 1: %+v", pictured, got.People)
+	}
+	for _, c := range got.Chats {
+		if c.AvatarSHA != "" {
+			t.Errorf("a chat without a picture has one: %+v", c)
 		}
 	}
 }

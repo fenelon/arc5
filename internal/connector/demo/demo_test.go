@@ -42,6 +42,32 @@ func TestSeedBuildsAnArchiveOnce(t *testing.T) {
 	}
 
 	dan := titles["Dan Whitfield"]
+	for _, title := range []string{"Dan Whitfield", "Marina Sokolova", "Familia: Marina y Pablo"} {
+		if titles[title].AvatarSHA == "" {
+			t.Errorf("%s has no picture", title)
+		}
+	}
+	if titles["Походы 2026"].AvatarSHA != "" {
+		t.Error("every chat has a picture; the demo should show initials too")
+	}
+	all, err := store.ChatMessages(dan.ID, archive.Anchor{}, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var replacedPlans int
+	for _, m := range all.Messages {
+		if m.SenderID != 0 && m.SenderAvatarSHA != dan.AvatarSHA {
+			t.Errorf("Dan's messages show another picture than his chat: %q", m.SenderAvatarSHA)
+		}
+		for _, r := range m.Replaced {
+			if r.FileName == "floor-plan.png" && r.Status == model.StatusStored && len(m.Attachments) == 1 && m.Attachments[0].FileName == "floor-plan-v2.png" {
+				replacedPlans++
+			}
+		}
+	}
+	if replacedPlans != 1 {
+		t.Errorf("want the floor plan replaced by an edit once, got %d", replacedPlans)
+	}
 	quarters, err := store.ChatQuarters(dan.ID, time.UTC)
 	if err != nil || len(quarters) < 8 {
 		t.Errorf("Dan's chat spans %d quarters; the year rail needs several years: %v", len(quarters), err)

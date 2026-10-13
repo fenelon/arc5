@@ -136,12 +136,13 @@ type SenderInfo struct {
 	AccountID   int64
 	DisplayName string
 	Username    string
+	AvatarSHA   string // their picture in the media store, or ""
 }
 
 func (s *Store) Sender(id int64) (SenderInfo, error) {
 	var sn SenderInfo
-	err := s.r.QueryRow(`SELECT id, account_id, display_name, username FROM senders WHERE id = ?`, id).
-		Scan(&sn.ID, &sn.AccountID, &sn.DisplayName, &sn.Username)
+	err := s.r.QueryRow(`SELECT id, account_id, display_name, username, avatar_sha256 FROM senders WHERE id = ?`, id).
+		Scan(&sn.ID, &sn.AccountID, &sn.DisplayName, &sn.Username, &sn.AvatarSHA)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SenderInfo{}, fmt.Errorf("sender %d: %w", id, ErrNotFound)
 	}

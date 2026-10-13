@@ -67,6 +67,19 @@ func TestSinkWritesAreBoundToItsAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 	sink.ReportProgress(Progress{Phase: PhaseLive})
+	picture := model.AvatarRef{Kind: model.AvatarChat, SourceID: "c1", AvatarID: "photo:1"}
+	if stored, err := sink.AvatarStored(picture); err != nil || stored {
+		t.Fatalf("AvatarStored before = %v, %v", stored, err)
+	}
+	if err := sink.PutAvatar(picture, strings.NewReader("jpeg")); err != nil {
+		t.Fatal(err)
+	}
+	if stored, err := sink.AvatarStored(picture); err != nil || !stored {
+		t.Fatalf("AvatarStored after = %v, %v", stored, err)
+	}
+	if _, err := store.AvatarStored(other, picture); !errors.Is(err, archive.ErrUnknownChat) {
+		t.Errorf("the picture reached another account: %v", err)
+	}
 
 	stored, err := store.Message(acc, "c1", "1")
 	if err != nil {
@@ -92,6 +105,10 @@ func TestSinkErrorClassification(t *testing.T) {
 	_, err := sink.UpsertMessage(model.Message{ChatSourceID: "nope", SourceID: "1", SentAt: time.Unix(1, 0)})
 	if !errors.Is(err, archive.ErrUnknownChat) || errors.Is(err, ErrStorage) {
 		t.Errorf("unknown chat error = %v; want ErrUnknownChat and not ErrStorage", err)
+	}
+	err = sink.PutAvatar(model.AvatarRef{Kind: model.AvatarSender, SourceID: "nobody", AvatarID: "p"}, strings.NewReader("x"))
+	if !errors.Is(err, archive.ErrNotFound) || errors.Is(err, ErrStorage) {
+		t.Errorf("unknown sender's picture = %v; want ErrNotFound and not ErrStorage", err)
 	}
 
 	// A broken database is.

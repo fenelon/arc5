@@ -26,7 +26,8 @@ type ChatSummary struct {
 	LastSender   string
 	LastOutgoing bool
 	LastKind     model.MessageKind
-	LastFiles    int // attachments on the last message
+	LastFiles    int    // attachments on the last message
+	AvatarSHA    string // the chat's picture in the media store, or ""
 }
 
 // ChatList returns the chats of the given accounts that hold messages, most
@@ -43,7 +44,7 @@ func (s *Store) ChatList(accountIDs []int64, limit, offset int) ([]ChatSummary, 
 	rows, err := s.r.Query(`
 		SELECT c.id, c.account_id, c.kind, c.title, m.sent_at, m.text, m.kind, m.outgoing,
 		       COALESCE(sn.display_name, ''),
-		       (SELECT COUNT(*) FROM attachments a WHERE a.message_id = m.id)
+		       (SELECT COUNT(*) FROM attachments a WHERE a.message_id = m.id AND a.position >= 0), c.avatar_sha256
 		FROM chats c
 		JOIN messages m ON m.id = (
 			SELECT m2.id FROM messages m2 WHERE m2.chat_id = c.id
@@ -64,7 +65,7 @@ func (s *Store) ChatList(accountIDs []int64, limit, offset int) ([]ChatSummary, 
 			sent           int64
 			outgoing       int
 		)
-		if err := rows.Scan(&c.ID, &c.AccountID, &kind, &c.Title, &sent, &c.LastText, &lastKind, &outgoing, &c.LastSender, &c.LastFiles); err != nil {
+		if err := rows.Scan(&c.ID, &c.AccountID, &kind, &c.Title, &sent, &c.LastText, &lastKind, &outgoing, &c.LastSender, &c.LastFiles, &c.AvatarSHA); err != nil {
 			return nil, err
 		}
 		c.Kind, c.LastKind = model.ChatKind(kind), model.MessageKind(lastKind)
@@ -84,6 +85,7 @@ type ChatInfo struct {
 	Archived  bool
 	Messages  int
 	FirstAt   time.Time // zero when the chat is empty
+	AvatarSHA string    // the chat's picture in the media store, or ""
 }
 
 func (s *Store) Chat(id int64) (ChatInfo, error) {
@@ -96,9 +98,9 @@ func (s *Store) Chat(id int64) (ChatInfo, error) {
 	err := s.r.QueryRow(`
 		SELECT c.id, c.account_id, c.source_id, c.kind, c.title, c.archived,
 		       (SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.id),
-		       (SELECT MIN(m.sent_at) FROM messages m WHERE m.chat_id = c.id)
+		       (SELECT MIN(m.sent_at) FROM messages m WHERE m.chat_id = c.id), c.avatar_sha256
 		FROM chats c WHERE c.id = ?`, id).
-		Scan(&c.ID, &c.AccountID, &c.SourceID, &kind, &c.Title, &archived, &c.Messages, &first)
+		Scan(&c.ID, &c.AccountID, &c.SourceID, &kind, &c.Title, &archived, &c.Messages, &first, &c.AvatarSHA)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ChatInfo{}, fmt.Errorf("chat %d: %w", id, ErrNotFound)
 	}
@@ -124,6 +126,9 @@ type MessageView struct {
 	ReplyToSourceID string
 	Versions        int // earlier texts kept for this message
 	Attachments     []StoredAttachment
+	Replaced        []StoredAttachment // attachments edits replaced, oldest first
+	SenderID        int64              // zero when the source named no sender
+	SenderAvatarSHA string             // the sender's picture in the media store, or ""
 }
 
 // Anchor says which part of a conversation to read. At most one field is set;
@@ -145,7 +150,8 @@ type Window struct {
 const messageViewSelect = `
 	SELECT m.id, m.source_id, m.kind, m.outgoing, COALESCE(sn.display_name, ''), m.sent_at, m.text,
 	       m.edited_at, m.deleted_at, m.forwarded_from, m.reply_to_source_id,
-	       (SELECT COUNT(*) FROM message_versions v WHERE v.message_id = m.id)
+	       (SELECT COUNT(*) FROM message_versions v WHERE v.message_id = m.id),
+	       COALESCE(sn.id, 0), COALESCE(sn.avatar_sha256, '')
 	FROM messages m LEFT JOIN senders sn ON sn.id = m.sender_id
 	WHERE m.chat_id = ?`
 
@@ -174,7 +180,7 @@ func (s *Store) views(query string, args ...any) ([]MessageView, error) {
 			edited, deleted sql.NullInt64
 		)
 		if err := rows.Scan(&v.ID, &v.SourceID, &kind, &outgoing, &v.SenderName, &sent, &v.Text,
-			&edited, &deleted, &v.ForwardedFrom, &v.ReplyToSourceID, &v.Versions); err != nil {
+			&edited, &deleted, &v.ForwardedFrom, &v.ReplyToSourceID, &v.Versions, &v.SenderID, &v.SenderAvatarSHA); err != nil {
 			return nil, err
 		}
 		v.Kind, v.Outgoing = model.MessageKind(kind), outgoing != 0
@@ -259,7 +265,7 @@ func (s *Store) ChatMessages(chatID int64, a Anchor, limit int) (Window, error) 
 	return w, s.attach(w.Messages)
 }
 
-// attach fills in the attachments of each message.
+// attach fills in the attachments of each message, current and replaced.
 func (s *Store) attach(messages []MessageView) error {
 	if len(messages) == 0 {
 		return nil
@@ -270,27 +276,24 @@ func (s *Store) attach(messages []MessageView) error {
 		at[m.ID], ids[i] = i, m.ID
 	}
 	rows, err := s.r.Query(`
-		SELECT message_id, id, position, kind, file_name, mime_type, size, sha256, status, reason, ephemeral, requested
-		FROM attachments WHERE message_id IN (`+placeholders(len(ids))+`) ORDER BY message_id, position`, ids...)
+		SELECT message_id, `+attachmentColumns+`
+		FROM attachments WHERE message_id IN (`+placeholders(len(ids))+`) ORDER BY message_id, replaced_at IS NOT NULL, replaced_at, position`, ids...)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var (
-			messageID            int64
-			a                    StoredAttachment
-			kind, status         string
-			ephemeral, requested int
-		)
-		if err := rows.Scan(&messageID, &a.ID, &a.Position, &kind, &a.FileName, &a.MimeType, &a.Size, &a.SHA256,
-			&status, &a.Reason, &ephemeral, &requested); err != nil {
+		var messageID int64
+		a, err := scanAttachment(rows, &messageID)
+		if err != nil {
 			return err
 		}
-		a.Kind, a.Status = model.AttachmentKind(kind), model.AttachmentStatus(status)
-		a.Ephemeral, a.Requested = ephemeral != 0, requested != 0
-		i := at[messageID]
-		messages[i].Attachments = append(messages[i].Attachments, a)
+		m := &messages[at[messageID]]
+		if a.Replaced.IsZero() {
+			m.Attachments = append(m.Attachments, a)
+		} else {
+			m.Replaced = append(m.Replaced, a)
+		}
 	}
 	return rows.Err()
 }
@@ -339,24 +342,15 @@ type AttachmentFile struct {
 }
 
 func (s *Store) AttachmentFile(id int64) (AttachmentFile, error) {
-	var (
-		f                    AttachmentFile
-		kind, status         string
-		ephemeral, requested int
-	)
-	err := s.r.QueryRow(`
-		SELECT id, message_id, position, kind, file_name, mime_type, size, sha256, status, reason, ephemeral, requested
-		FROM attachments WHERE id = ?`, id).
-		Scan(&f.ID, &f.MessageID, &f.Position, &kind, &f.FileName, &f.MimeType, &f.Size, &f.SHA256,
-			&status, &f.Reason, &ephemeral, &requested)
+	var f AttachmentFile
+	a, err := scanAttachment(s.r.QueryRow(`SELECT message_id, `+attachmentColumns+` FROM attachments WHERE id = ?`, id), &f.MessageID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AttachmentFile{}, fmt.Errorf("attachment %d: %w", id, ErrNotFound)
 	}
 	if err != nil {
 		return AttachmentFile{}, err
 	}
-	f.Kind, f.Status = model.AttachmentKind(kind), model.AttachmentStatus(status)
-	f.Ephemeral, f.Requested = ephemeral != 0, requested != 0
+	f.StoredAttachment = a
 	if f.Status == model.StatusStored && len(f.SHA256) == 64 {
 		f.Path = s.MediaPath(f.SHA256)
 	}

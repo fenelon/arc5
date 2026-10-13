@@ -83,9 +83,28 @@ type Attachment struct {
 	MimeType  string
 	Size      int64
 	Ephemeral bool // self-destructing or view-once at the source
+	// SourceID is the source's identity for the file, such as "photo:123".
+	// When an edit brings a different file at the same position, the stored
+	// one is kept as replaced. Empty means unknown: the first file stays.
+	SourceID string
 	// NoFetch records the attachment without downloading it; NoFetchReason says why.
 	NoFetch       bool
 	NoFetchReason string
+}
+
+type AvatarKind string
+
+const (
+	AvatarChat   AvatarKind = "chat"
+	AvatarSender AvatarKind = "sender"
+)
+
+// AvatarRef names a chat's or a sender's picture: whose it is, by source ID,
+// and the source's identity for the picture, which changes when it does.
+type AvatarRef struct {
+	Kind     AvatarKind
+	SourceID string
+	AvatarID string
 }
 
 // AttachmentRef names an attachment by source IDs, so connectors never see database IDs.
@@ -93,6 +112,11 @@ type AttachmentRef struct {
 	ChatSourceID    string
 	MessageSourceID string
 	Position        int
+	// SourceID is the file's identity, when the source gives one. A ref
+	// whose identity no longer matches the attachment at its position (an
+	// edit replaced the file) is refused, so a late download cannot land on
+	// the replacement.
+	SourceID string
 }
 
 type Message struct {

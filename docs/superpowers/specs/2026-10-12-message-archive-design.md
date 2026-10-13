@@ -131,6 +131,8 @@ type Sink interface {
     ChatArchived(chatSourceID string) (bool, error)
     RequestedMedia() <-chan AttachmentRef   // "fetch now" and retry, ignoring the cap
     ReportProgress(Progress)                // backfill progress, connection state
+    AvatarStored(AvatarRef) (bool, error)   // is this picture already kept?
+    PutAvatar(ref AvatarRef, r io.Reader) error
 }
 
 type State interface {                      // per-account key-value store
@@ -193,11 +195,11 @@ speaks a wire protocol to a subprocess; the core does not change.
 accounts(id, connector, label, settings JSON, enabled, created_at)
 
 chats(id, account_id, source_id, kind, title, archived, created_at,
-      UNIQUE(account_id, source_id))
+      avatar_id, avatar_sha256, UNIQUE(account_id, source_id))
       kind: private | group | channel | bot
 
 senders(id, account_id, source_id, display_name, username,
-        UNIQUE(account_id, source_id))
+        avatar_id, avatar_sha256, UNIQUE(account_id, source_id))
 
 messages(id, chat_id, source_id, sender_id, kind, sent_at, text,
          outgoing, reply_to_source_id, forwarded_from, edited_at,
@@ -208,7 +210,8 @@ messages(id, chat_id, source_id, sender_id, kind, sent_at, text,
 message_versions(id, message_id, text, replaced_at)
 
 attachments(id, message_id, position, kind, file_name, mime_type, size,
-            sha256, status, reason, ephemeral, requested)
+            sha256, status, reason, ephemeral, requested, source_id,
+            replaced_at)
             kind:   photo | video | audio | voice | document | sticker | other
             status: pending | stored | skipped | failed | unavailable
 
@@ -243,6 +246,20 @@ Rules the archive enforces:
   the chat view and are excluded from search by default.
 - **Media files** are stored at `media/<aa>/<bb>/<sha256>`, so identical files
   are kept once. `attachments.sha256` points at the file.
+- **Media an edit replaces.** An attachment may carry the source's identity
+  for its file (`source_id`). When a message arrives again with a different
+  file at a position whose stored attachment has a known identity, the stored
+  attachment is kept as replaced: `replaced_at` is set and it leaves its
+  position (a replaced row's position is negative), and the new file takes the
+  position. The chat view shows replaced media with the message's earlier
+  versions. A replaced attachment that was never downloaded is marked
+  `unavailable`. Attachments without an identity keep the earlier rule: the
+  first attachment at a position stays.
+- **Avatars.** A chat or sender may have a picture (`avatar_id` is the
+  source's identity of the picture, `avatar_sha256` its file in the media
+  store). A connector asks `AvatarStored` and sends a new picture with
+  `PutAvatar` only when the identity changed. A picture removed at the source
+  is not removed here: the last one kept is still shown.
 - **Size cap.** A global setting, default 50 MB. An attachment over the cap is
   recorded with `status = skipped` and can be fetched on demand from the
   interface while the source still has it.
@@ -347,7 +364,10 @@ other device. On revocation the account's status becomes "needs login".
 | Broadcast channel | channel | no |
 | Bot | bot | no |
 
-Defaults apply when a chat is first seen. The owner can toggle any chat. The
+A chat's source ID names its Telegram type: `user:<id>`, `chat:<id>` for a
+basic group, `channel:<id>` for a supergroup or channel. A sender's source ID is
+`user:<id>` or, for messages a channel or group signs as itself,
+`channel:<id>` or `chat:<id>`. Defaults apply when a chat is first seen. The owner can toggle any chat. The
 connector calls `ChatArchived` before fetching or storing anything for a chat.
 Secret chats are not visible to the API and are not listed.
 
@@ -381,7 +401,18 @@ stored message forward.
 
 Deletion updates for private chats and basic groups carry message IDs without
 a chat; those IDs are unique per account, so the connector resolves the chat
-with `LookupChats`. Supergroup and channel deletions name the channel.
+with `LookupChats` over private, bot and group chats and keeps only the
+`user:` and `chat:` source IDs: a supergroup is also a `group`, but its
+message IDs are numbered per channel and may repeat. Supergroup and channel
+deletions name the channel.
+
+### Avatars
+
+The small profile picture of each archived chat and of each sender (Telegram's
+160-pixel `photo_small`) is downloaded when the connector sees a picture
+identity it has not kept, after live media and before backfill media. A private
+chat's picture is its user's. The interface shows a picture where it would
+otherwise show initials.
 
 ### Media
 
@@ -493,6 +524,9 @@ The layout follows the selected source's display type:
   quarter, the current position marked in the accent colour; each band jumps to
   that quarter. On a phone the list and the conversation are separate screens
   and the rail becomes a year picker.
+Chats and people show their picture from the source where there is one, and
+coloured initials otherwise.
+
 - **Mail** (mail connectors): folders on the left (Inbox, Sent, All mail) under
   the mailbox's name and address; conversations as rows with sender name and
   address, message count, subject, snippet, attachment mark and date. A thread

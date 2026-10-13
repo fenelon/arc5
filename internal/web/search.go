@@ -48,13 +48,15 @@ func pieces(fragments []search.Fragment) []Piece {
 // NameRow is a chat whose title matched.
 type NameRow struct {
 	Href, Initials, Detail string
+	Avatar                 string // the chat's picture, or "" for initials
 	Title                  []Piece
 }
 
 // PersonRow is a person whose name matched.
 type PersonRow struct {
-	Href string
-	Name []Piece
+	Href   string
+	Avatar string // their picture, or ""
+	Name   []Piece
 }
 
 // HitRow is a message that matched.
@@ -154,12 +156,12 @@ func (s *Server) results(ctx context.Context, r *http.Request, sel selection) (*
 		for _, c := range names.Chats {
 			res.Chats = append(res.Chats, NameRow{
 				Href:     fmt.Sprintf("/s/%s/c/%d?%s", sel.Key, c.ChatID, keep[1:]),
-				Initials: initials(fragmentText(c.Title)), Title: pieces(c.Title),
+				Initials: initials(fragmentText(c.Title)), Avatar: avatarURL(c.AvatarSHA), Title: pieces(c.Title),
 				Detail: kindLabel(c.Kind) + ", last message " + s.when(c.LastAt),
 			})
 		}
 		for _, p := range names.People {
-			res.People = append(res.People, PersonRow{Href: fmt.Sprintf("%s&person=%d", base, p.SenderID), Name: pieces(p.Name)})
+			res.People = append(res.People, PersonRow{Href: fmt.Sprintf("%s&person=%d", base, p.SenderID), Avatar: avatarURL(p.AvatarSHA), Name: pieces(p.Name)})
 		}
 	}
 

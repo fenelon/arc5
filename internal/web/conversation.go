@@ -46,7 +46,14 @@ type Message struct {
 	Edited        string // when it was last edited, "at 15:04" or "on 2 Oct at 15:04", or ""
 	Deleted       string // when the source deleted it, or ""
 	Versions      []Version
+	Replaced      []ReplacedFile // media edits replaced, oldest first
 	Attachments   []Attachment
+}
+
+// ReplacedFile is an attachment an edit replaced. URL is "" when the file
+// was never downloaded.
+type ReplacedFile struct {
+	Name, URL, Detail string
 }
 
 // Version is the text a message had before an edit.
@@ -136,6 +143,19 @@ func attachmentView(a archive.StoredAttachment) Attachment {
 		v.Mode, v.Detail = "pending", "Waiting to be downloaded"
 	}
 	return v
+}
+
+// replacedView describes a file an edit replaced: a link while it is
+// stored, otherwise why it is not.
+func replacedView(a archive.StoredAttachment, loc *time.Location) ReplacedFile {
+	view := attachmentView(a)
+	f := ReplacedFile{Name: view.Name, Detail: "until " + a.Replaced.In(loc).Format("2 Jan 2006, 15:04")}
+	if a.Status == model.StatusStored {
+		f.URL, f.Detail = view.URL, humanBytes(a.Size)+", "+f.Detail
+	} else if a.Reason != "" {
+		f.Detail = a.Reason + ", " + f.Detail
+	}
+	return f
 }
 
 var quarterNames = [...]string{"January to March", "April to June", "July to September", "October to December"}
@@ -332,6 +352,9 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 		}
 		for _, a := range m.Attachments {
 			v.Attachments = append(v.Attachments, attachmentView(a))
+		}
+		for _, a := range m.Replaced {
+			v.Replaced = append(v.Replaced, replacedView(a, s.deps.Location))
 		}
 		day := &conv.Days[len(conv.Days)-1]
 		day.Messages = append(day.Messages, v)

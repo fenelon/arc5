@@ -25,11 +25,12 @@ const attachmentByRef = `
 	SELECT a.id FROM attachments a
 	JOIN messages m ON m.id = a.message_id
 	JOIN chats c ON c.id = m.chat_id
-	WHERE c.account_id = ? AND c.source_id = ? AND m.source_id = ? AND a.position = ?`
+	WHERE c.account_id = ? AND c.source_id = ? AND m.source_id = ? AND a.position = ?
+	  AND (? = '' OR a.source_id = '' OR a.source_id = ?)`
 
 func (s *Store) attachmentID(accountID int64, ref model.AttachmentRef) (int64, error) {
 	var id int64
-	err := s.w.QueryRow(attachmentByRef, accountID, ref.ChatSourceID, ref.MessageSourceID, ref.Position).Scan(&id)
+	err := s.w.QueryRow(attachmentByRef, accountID, ref.ChatSourceID, ref.MessageSourceID, ref.Position, ref.SourceID, ref.SourceID).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, fmt.Errorf("%w: %+v", ErrUnknownAttachment, ref)
 	}
@@ -50,23 +51,33 @@ func (t *readTracker) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// PutMedia stores an attachment's bytes and marks it stored. The file is
-// written to a temp file, synced, and renamed into place, so a failed or
-// interrupted download never leaves a partial file under a content hash.
-// A failure of r is reported wrapping ErrMediaRead and leaves the attachment
-// as it was.
+// PutMedia stores an attachment's bytes and marks it stored. A failure of r
+// is reported wrapping ErrMediaRead and leaves the attachment as it was.
 func (s *Store) PutMedia(accountID int64, ref model.AttachmentRef, r io.Reader) error {
 	id, err := s.attachmentID(accountID, ref)
 	if err != nil {
 		return err
 	}
+	sum, size, err := s.storeFile(r)
+	if err != nil {
+		return err
+	}
+	_, err = s.w.Exec(`UPDATE attachments SET sha256 = ?, size = ?, status = 'stored', reason = '', requested = 0 WHERE id = ?`, sum, size, id)
+	return err
+}
+
+// storeFile writes r into the media store and returns its SHA-256 (hex) and
+// size. The file is written to a temp file, synced, and renamed into place,
+// so a failed or interrupted download never leaves a partial file under a
+// content hash. A failure of r is reported wrapping ErrMediaRead.
+func (s *Store) storeFile(r io.Reader) (string, int64, error) {
 	tmpDir := filepath.Join(s.dataDir, "media", "tmp")
 	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
-		return err
+		return "", 0, err
 	}
 	tmp, err := os.CreateTemp(tmpDir, "put-*") // created with mode 0600
 	if err != nil {
-		return err
+		return "", 0, err
 	}
 	defer os.Remove(tmp.Name()) // fails harmlessly once the file has been renamed
 
@@ -80,30 +91,100 @@ func (s *Store) PutMedia(accountID int64, ref model.AttachmentRef, r io.Reader) 
 		err = closeErr
 	}
 	if tracked.err != nil {
-		return fmt.Errorf("%w: %v", ErrMediaRead, tracked.err)
+		return "", 0, fmt.Errorf("%w: %v", ErrMediaRead, tracked.err)
 	}
 	if err != nil {
-		return err
+		return "", 0, err
 	}
 
 	sum := hex.EncodeToString(hash.Sum(nil))
 	final := s.MediaPath(sum)
 	if _, err := os.Stat(final); errors.Is(err, fs.ErrNotExist) {
 		if err := os.MkdirAll(filepath.Dir(final), 0o700); err != nil {
-			return err
+			return "", 0, err
 		}
 		if err := os.Rename(tmp.Name(), final); err != nil {
-			return err
+			return "", 0, err
 		}
 		if err := syncDir(filepath.Dir(final)); err != nil {
-			return err
+			return "", 0, err
 		}
 	} else if err != nil {
+		return "", 0, err
+	}
+	return sum, size, nil
+}
+
+// avatarTable is the table holding a kind of avatar's owner.
+func avatarTable(kind model.AvatarKind) (string, error) {
+	switch kind {
+	case model.AvatarChat:
+		return "chats", nil
+	case model.AvatarSender:
+		return "senders", nil
+	}
+	return "", fmt.Errorf("%w: avatar kind %q", ErrInvalid, kind)
+}
+
+// avatarOwner checks that the picture's chat or sender exists.
+func (s *Store) avatarOwner(accountID int64, ref model.AvatarRef) (string, error) {
+	table, err := avatarTable(ref.Kind)
+	if err != nil {
+		return "", err
+	}
+	var id int64
+	err = s.w.QueryRow(`SELECT id FROM `+table+` WHERE account_id = ? AND source_id = ?`, accountID, ref.SourceID).Scan(&id)
+	switch {
+	case errors.Is(err, sql.ErrNoRows) && ref.Kind == model.AvatarChat:
+		return "", fmt.Errorf("%w: %q", ErrUnknownChat, ref.SourceID)
+	case errors.Is(err, sql.ErrNoRows):
+		return "", fmt.Errorf("sender %q: %w", ref.SourceID, ErrNotFound)
+	}
+	return table, err
+}
+
+// AvatarStored reports whether the picture with this identity is the one
+// kept for its chat or sender, so a connector downloads only new pictures.
+func (s *Store) AvatarStored(accountID int64, ref model.AvatarRef) (bool, error) {
+	table, err := s.avatarOwner(accountID, ref)
+	if err != nil {
+		return false, err
+	}
+	var stored bool
+	err = s.w.QueryRow(`SELECT avatar_id = ? AND avatar_sha256 != '' FROM `+table+` WHERE account_id = ? AND source_id = ?`,
+		ref.AvatarID, accountID, ref.SourceID).Scan(&stored)
+	return stored && ref.AvatarID != "", err
+}
+
+// PutAvatar stores a chat's or sender's picture in the media store and makes
+// it the one shown. The picture it replaces stays in the store.
+func (s *Store) PutAvatar(accountID int64, ref model.AvatarRef, r io.Reader) error {
+	if ref.AvatarID == "" {
+		return fmt.Errorf("%w: a picture needs its source identity", ErrInvalid)
+	}
+	table, err := s.avatarOwner(accountID, ref)
+	if err != nil {
 		return err
 	}
-
-	_, err = s.w.Exec(`UPDATE attachments SET sha256 = ?, size = ?, status = 'stored', reason = '', requested = 0 WHERE id = ?`, sum, size, id)
+	sum, _, err := s.storeFile(r)
+	if err != nil {
+		return err
+	}
+	_, err = s.w.Exec(`UPDATE `+table+` SET avatar_id = ?, avatar_sha256 = ? WHERE account_id = ? AND source_id = ?`,
+		clean(ref.AvatarID), sum, accountID, ref.SourceID)
 	return err
+}
+
+// IsAvatar reports whether a stored file is some chat's or sender's current
+// picture, so the interface serves only those as avatars.
+func (s *Store) IsAvatar(sha256hex string) bool {
+	if sha256hex == "" {
+		return false
+	}
+	var found bool
+	err := s.r.QueryRow(`SELECT EXISTS (SELECT 1 FROM chats WHERE avatar_sha256 = ?) OR EXISTS (SELECT 1 FROM senders WHERE avatar_sha256 = ?)`,
+		sha256hex, sha256hex).Scan(&found)
+	return err == nil && found
 }
 
 // syncDir flushes a directory after a rename into it, so the new file's name
@@ -154,14 +235,14 @@ func (s *Store) RequestMedia(attachmentID int64) (int64, model.AttachmentRef, er
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`UPDATE attachments SET status = 'pending', reason = '', requested = 1 WHERE id = ? AND status != 'stored'`, attachmentID)
+	res, err := tx.Exec(`UPDATE attachments SET status = 'pending', reason = '', requested = 1 WHERE id = ? AND status != 'stored' AND position >= 0`, attachmentID)
 	if err != nil {
 		return 0, model.AttachmentRef{}, err
 	}
 	if n, err := res.RowsAffected(); err != nil {
 		return 0, model.AttachmentRef{}, err
 	} else if n == 0 {
-		return 0, model.AttachmentRef{}, fmt.Errorf("attachment %d is missing or already stored: %w", attachmentID, ErrNotFound)
+		return 0, model.AttachmentRef{}, fmt.Errorf("attachment %d is missing, already stored, or replaced: %w", attachmentID, ErrNotFound)
 	}
 
 	var (
@@ -169,10 +250,10 @@ func (s *Store) RequestMedia(attachmentID int64) (int64, model.AttachmentRef, er
 		ref       model.AttachmentRef
 	)
 	err = tx.QueryRow(`
-		SELECT c.account_id, c.source_id, m.source_id, a.position FROM attachments a
+		SELECT c.account_id, c.source_id, m.source_id, a.position, a.source_id FROM attachments a
 		JOIN messages m ON m.id = a.message_id
 		JOIN chats c ON c.id = m.chat_id
-		WHERE a.id = ?`, attachmentID).Scan(&accountID, &ref.ChatSourceID, &ref.MessageSourceID, &ref.Position)
+		WHERE a.id = ?`, attachmentID).Scan(&accountID, &ref.ChatSourceID, &ref.MessageSourceID, &ref.Position, &ref.SourceID)
 	if err != nil {
 		return 0, model.AttachmentRef{}, err
 	}
@@ -181,12 +262,23 @@ func (s *Store) RequestMedia(attachmentID int64) (int64, model.AttachmentRef, er
 
 // RequestedMedia lists an account's attachments waiting on an explicit request.
 func (s *Store) RequestedMedia(accountID int64) ([]model.AttachmentRef, error) {
+	return s.pendingMedia(accountID, true)
+}
+
+// PendingMedia lists an account's attachments still waiting to be
+// downloaded that nobody asked for by hand, so a connector that restarted
+// can queue them again.
+func (s *Store) PendingMedia(accountID int64) ([]model.AttachmentRef, error) {
+	return s.pendingMedia(accountID, false)
+}
+
+func (s *Store) pendingMedia(accountID int64, requested bool) ([]model.AttachmentRef, error) {
 	rows, err := s.r.Query(`
-		SELECT c.source_id, m.source_id, a.position FROM attachments a
+		SELECT c.source_id, m.source_id, a.position, a.source_id FROM attachments a
 		JOIN messages m ON m.id = a.message_id
 		JOIN chats c ON c.id = m.chat_id
-		WHERE a.requested = 1 AND a.status = 'pending' AND c.account_id = ?
-		ORDER BY a.id`, accountID)
+		WHERE a.requested = ? AND a.status = 'pending' AND a.position >= 0 AND c.account_id = ?
+		ORDER BY a.id`, b2i(requested), accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +286,7 @@ func (s *Store) RequestedMedia(accountID int64) ([]model.AttachmentRef, error) {
 	var out []model.AttachmentRef
 	for rows.Next() {
 		var ref model.AttachmentRef
-		if err := rows.Scan(&ref.ChatSourceID, &ref.MessageSourceID, &ref.Position); err != nil {
+		if err := rows.Scan(&ref.ChatSourceID, &ref.MessageSourceID, &ref.Position, &ref.SourceID); err != nil {
 			return nil, err
 		}
 		out = append(out, ref)

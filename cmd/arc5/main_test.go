@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/fenelon/arc5/internal/archive"
+	"github.com/fenelon/arc5/internal/connector"
 	"github.com/fenelon/arc5/internal/model"
 	"github.com/fenelon/arc5/internal/search"
 )
@@ -325,5 +326,19 @@ func TestDemoCommandAndTheInterface(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("serve did not stop after cancel")
+	}
+}
+
+func TestTelegramIsOfferedAsASource(t *testing.T) {
+	info, ok := connector.Default.Info("telegram")
+	if !ok || info.Hidden || info.Title != "Telegram" || info.Display != connector.DisplayChats {
+		t.Fatalf("telegram = %+v, %v", info, ok)
+	}
+	c, ok := connector.Default.New("telegram")
+	if !ok {
+		t.Fatal("no telegram connector")
+	}
+	if _, can := c.(connector.SignOuter); !can {
+		t.Error("the telegram connector cannot sign out")
 	}
 }

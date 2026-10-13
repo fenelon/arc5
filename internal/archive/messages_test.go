@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -462,5 +463,162 @@ func TestOutgoingIsStored(t *testing.T) {
 	}
 	if mustMessage(t, s, acc, "2").Outgoing {
 		t.Error("message 2 is marked outgoing")
+	}
+}
+
+func TestEditReplacesMedia(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	photo := func(id string) model.Attachment {
+		return model.Attachment{Kind: model.AttachPhoto, FileName: id + ".jpg", Size: 10, SourceID: id}
+	}
+	m := textMsg("1", "look")
+	m.Attachments = []model.Attachment{photo("photo:1")}
+	if refs := mustUpsert(t, s, acc, m); len(refs) != 1 {
+		t.Fatalf("first photo: %d refs", len(refs))
+	}
+	if refs := mustUpsert(t, s, acc, m); len(refs) != 1 {
+		t.Fatalf("the same photo again: %d refs", len(refs))
+	}
+	stored := mustMessage(t, s, acc, "1")
+	if atts, _ := s.Attachments(stored.ID); len(atts) != 1 {
+		t.Fatalf("the same photo again added a row: %d", len(atts))
+	}
+
+	// The edit replaces the photo before the first was downloaded.
+	m.Attachments = []model.Attachment{photo("photo:2")}
+	refs := mustUpsert(t, s, acc, m)
+	if len(refs) != 1 || refs[0].Position != 0 {
+		t.Fatalf("the new photo is not waiting at position 0: %+v", refs)
+	}
+	current, err := s.Attachments(stored.ID)
+	if err != nil || len(current) != 1 || current[0].FileName != "photo:2.jpg" {
+		t.Fatalf("current attachments = %+v, %v", current, err)
+	}
+	replaced, err := s.ReplacedAttachments(stored.ID)
+	if err != nil || len(replaced) != 1 {
+		t.Fatalf("replaced attachments = %+v, %v", replaced, err)
+	}
+	if r := replaced[0]; r.FileName != "photo:1.jpg" || r.Replaced.IsZero() || r.Position >= 0 || r.Status != model.StatusUnavailable {
+		t.Errorf("the replaced photo = %+v", r)
+	}
+
+	// A downloaded photo that is replaced stays stored.
+	if err := s.PutMedia(acc, refs[0], strings.NewReader("second")); err != nil {
+		t.Fatal(err)
+	}
+	m.Attachments = []model.Attachment{photo("photo:3")}
+	mustUpsert(t, s, acc, m)
+	replaced, _ = s.ReplacedAttachments(stored.ID)
+	if len(replaced) != 2 || replaced[1].Status != model.StatusStored || replaced[1].FileName != "photo:2.jpg" {
+		t.Errorf("after a second edit, replaced = %+v", replaced)
+	}
+
+	// Without an identity, the first attachment at a position stays.
+	plain := textMsg("2", "file")
+	plain.Attachments = []model.Attachment{{Kind: model.AttachDocument, FileName: "a.pdf", Size: 1}}
+	mustUpsert(t, s, acc, plain)
+	plain.Attachments[0].FileName = "b.pdf"
+	mustUpsert(t, s, acc, plain)
+	if a := attachment(t, s, acc, "2"); a.FileName != "a.pdf" {
+		t.Errorf("an attachment without identity was replaced: %+v", a)
+	}
+	// A row stored before identities existed takes the first identity it is sent.
+	plain.Attachments[0].SourceID = "document:9"
+	mustUpsert(t, s, acc, plain)
+	if replaced, _ := s.ReplacedAttachments(mustMessage(t, s, acc, "2").ID); len(replaced) != 0 {
+		t.Errorf("a first identity counted as a replacement: %+v", replaced)
+	}
+	plain.Attachments[0].SourceID = "document:10"
+	mustUpsert(t, s, acc, plain)
+	if replaced, _ := s.ReplacedAttachments(mustMessage(t, s, acc, "2").ID); len(replaced) != 1 {
+		t.Errorf("a changed identity after the first did not replace: %+v", replaced)
+	}
+}
+
+func TestReplacedMediaCannotBeRequested(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	m := textMsg("1", "look")
+	m.Attachments = []model.Attachment{{Kind: model.AttachPhoto, Size: 1, SourceID: "photo:1"}}
+	mustUpsert(t, s, acc, m)
+	m.Attachments[0].SourceID = "photo:2"
+	mustUpsert(t, s, acc, m)
+	replaced, err := s.ReplacedAttachments(mustMessage(t, s, acc, "1").ID)
+	if err != nil || len(replaced) != 1 {
+		t.Fatalf("replaced = %+v, %v", replaced, err)
+	}
+	if _, _, err := s.RequestMedia(replaced[0].ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("requesting a replaced attachment: %v, want ErrNotFound", err)
+	}
+}
+
+func TestReplacedMediaKeepsTheEditsDate(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	m := textMsg("1", "look")
+	m.Attachments = []model.Attachment{{Kind: model.AttachPhoto, Size: 1, SourceID: "photo:1"}}
+	mustUpsert(t, s, acc, m)
+	m.Attachments[0].SourceID = "photo:2"
+	m.EditedAt = t0.Add(time.Hour)
+	mustUpsert(t, s, acc, m)
+	replaced, err := s.ReplacedAttachments(mustMessage(t, s, acc, "1").ID)
+	if err != nil || len(replaced) != 1 || !replaced[0].Replaced.Equal(t0.Add(time.Hour)) {
+		t.Errorf("replaced = %+v, %v; want it replaced at the edit's time", replaced, err)
+	}
+}
+
+// Review finding: a download queued for a file an edit then replaced landed
+// on the replacement, because refs named only a position.
+func TestAStaleRefCannotTouchTheReplacement(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	m := textMsg("1", "look")
+	m.Attachments = []model.Attachment{{Kind: model.AttachPhoto, Size: 1, SourceID: "photo:x"}}
+	refs := mustUpsert(t, s, acc, m)
+	if len(refs) != 1 || refs[0].SourceID != "photo:x" {
+		t.Fatalf("refs = %+v; want the file's identity in the ref", refs)
+	}
+	stale := refs[0]
+	m.Attachments[0].SourceID = "photo:y"
+	fresh := mustUpsert(t, s, acc, m)
+	if len(fresh) != 1 || fresh[0].SourceID != "photo:y" {
+		t.Fatalf("refs after the edit = %+v", fresh)
+	}
+	if err := s.PutMedia(acc, stale, strings.NewReader("x bytes")); !errors.Is(err, ErrUnknownAttachment) {
+		t.Errorf("PutMedia with a stale ref = %v, want ErrUnknownAttachment", err)
+	}
+	if err := s.SetAttachmentStatus(acc, stale, model.StatusUnavailable, "gone"); !errors.Is(err, ErrUnknownAttachment) {
+		t.Errorf("SetAttachmentStatus with a stale ref = %v", err)
+	}
+	if err := s.PutMedia(acc, fresh[0], strings.NewReader("y bytes")); err != nil {
+		t.Fatal(err)
+	}
+	// A ref without an identity, as older callers send, still works.
+	plain := fresh[0]
+	plain.SourceID = ""
+	if err := s.SetAttachmentStatus(acc, plain, model.StatusFailed, "x"); err != nil {
+		t.Errorf("a ref without an identity: %v", err)
+	}
+}
+
+// Review finding: replaying the original after a dated edit made the first
+// photo current again.
+func TestAnOlderCopyDoesNotRevertAnEditedPhoto(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	original := textMsg("1", "look")
+	original.Attachments = []model.Attachment{{Kind: model.AttachPhoto, FileName: "x.jpg", Size: 1, SourceID: "photo:x"}}
+	mustUpsert(t, s, acc, original)
+	edited := original
+	edited.Attachments = []model.Attachment{{Kind: model.AttachPhoto, FileName: "y.jpg", Size: 1, SourceID: "photo:y"}}
+	edited.EditedAt = t0.Add(time.Hour)
+	mustUpsert(t, s, acc, edited)
+	mustUpsert(t, s, acc, original) // an older copy, as a backfill page fetched before the edit
+	id := mustMessage(t, s, acc, "1").ID
+	current, _ := s.Attachments(id)
+	replaced, _ := s.ReplacedAttachments(id)
+	if len(current) != 1 || current[0].FileName != "y.jpg" || len(replaced) != 1 {
+		t.Errorf("current %+v, replaced %+v; want y current and x replaced once", current, replaced)
 	}
 }
