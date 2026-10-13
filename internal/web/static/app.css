@@ -272,6 +272,9 @@ mark.hit{padding:0 2px;color:var(--hit-ink);background:var(--hit);border-radius:
 .panel__fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:4px 24px;margin-bottom:14px}
 .setting select,.setting input[type=text],.setting input[type=number],.setting input[type=password]{height:44px;padding:0 12px;font:inherit;color:var(--ink);background:var(--pane);border:1px solid var(--line);border-radius:8px}
 .setting--bool{margin-bottom:14px}
+.setting--bool .choice{display:flex;align-items:flex-start;line-height:1.4}
+.setting--bool .choice input{flex-shrink:0;margin-top:2px}
+.setting--bool .panel__help{padding-left:26px}
 .panel__foot{display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px 26px;padding:14px 20px;background:var(--bg);border-top:1px solid var(--line-soft)}
 .panel__foot form{margin:0}
 .link-button--warn{color:var(--warn-ink);font-weight:600;text-decoration:underline;list-style:none}

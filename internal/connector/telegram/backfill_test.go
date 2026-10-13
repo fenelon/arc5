@@ -81,6 +81,26 @@ func (h *history) fetch(peer tg.InputPeerClass, offsetID, minID, limit int) (his
 	return page, nil
 }
 
+// chatList is the fake's chat list, with each chat's newest message dated
+// as this history dates it.
+func (h *history) chatList() func(offset dialogOffset) (dialogPage, error) {
+	list := chatList()
+	return func(offset dialogOffset) (dialogPage, error) {
+		page, err := list(offset)
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		for i, m := range page.Messages {
+			chat := peerSourceID(messagePeer(m))
+			if n, ok := h.counts[chat]; ok {
+				msg := *m.(*tg.Message)
+				msg.Date = h.messageDate(chat, n)
+				page.Messages[i] = &msg
+			}
+		}
+		return page, err
+	}
+}
+
 func (h *history) callsFor(chat string) []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -119,7 +139,7 @@ func backfilled(t *testing.T, h *history, sink *memSink, state *memState, settin
 	sink.progress = nil // wait for this run's report, not an earlier run's
 	sink.mu.Unlock()
 	sl := &sleeps{}
-	c := newTestConnector(&fakeDialer{conn: &fakeConn{dialogs: chatList(), history: h.fetch}})
+	c := newTestConnector(&fakeDialer{conn: &fakeConn{dialogs: h.chatList(), history: h.fetch}})
 	c.sleep = sl.sleep
 	c.now = func() time.Time { return day0 }
 	stop := running(t, c, sink, state, settings)
@@ -286,5 +306,19 @@ func TestALongerLimitReachesQuietChats(t *testing.T) {
 	backfilled(t, h, sink, state, map[string]string{"age": "All history"})
 	if got := sink.texts("chat:10"); len(got) != 3 {
 		t.Errorf("after choosing all history: %v", got)
+	}
+}
+
+// A chat whose newest message is older than the age limit has nothing to
+// fetch: the chat list says so, and Telegram is not asked for its history.
+func TestAChatQuietSinceBeforeTheLimitIsNotAskedFor(t *testing.T) {
+	h := &history{counts: map[string]int{"user:1": 5, "chat:10": 3}, quiet: map[string]int{"chat:10": 200}}
+	sink, state := newMemSink(), signedIn(t)
+	backfilled(t, h, sink, state, map[string]string{"age": "Last 3 months"})
+	if got := h.callsFor("chat:10"); len(got) != 0 {
+		t.Errorf("a chat quiet for 200 days was asked for its last 3 months: %v", got)
+	}
+	if got := sink.texts("user:1"); len(got) != 5 {
+		t.Errorf("an active chat: %v", got)
 	}
 }
