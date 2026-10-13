@@ -180,6 +180,38 @@ func TestStoreOverTheCapSkipsTheFile(t *testing.T) {
 	}
 }
 
+// Files are found in the original by their MIME part, not their place in
+// the parser's output, so a change in how text is chosen cannot shift them.
+func TestFetchFromOriginalFindsThePartByItsPath(t *testing.T) {
+	a := newArchived(t)
+	if err := a.store.SetMediaCap(1); err != nil {
+		t.Fatal(err)
+	}
+	raw := crlf("From: a@example.com\nSubject: Two files\nMessage-ID: <two-files@x>\nContent-Type: multipart/mixed; boundary=b\n\n--b\nContent-Type: text/plain\n\nhi\n--b\nContent-Type: application/zip\nContent-Disposition: attachment; filename=one.zip\n\nfirst file\n--b\nContent-Type: application/zip\nContent-Disposition: attachment; filename=two.zip\n\nsecond file\n--b--\n")
+	// As an older parser might have recorded it: the second file first.
+	if err := a.sink.UpsertChat(model.Chat{SourceID: "thread:two-files@x", Kind: model.ChatThread, Title: "Two files"}); err != nil {
+		t.Fatal(err)
+	}
+	m := model.Message{ChatSourceID: "thread:two-files@x", SourceID: "two-files@x", SentAt: received, Text: "hi", Original: raw,
+		Attachments: []model.Attachment{
+			{Kind: model.AttachDocument, FileName: "two.zip", Size: 11, SourceID: "part:3"},
+			{Kind: model.AttachDocument, FileName: "one.zip", Size: 10, SourceID: "part:2"},
+		}}
+	if _, err := a.sink.UpsertMessage(m); err != nil {
+		t.Fatal(err)
+	}
+	if err := FetchFromOriginal(a.sink, model.AttachmentRef{ChatSourceID: m.ChatSourceID, MessageSourceID: m.SourceID, Position: 0, SourceID: "part:3"}); err != nil {
+		t.Fatal(err)
+	}
+	atts, _ := a.store.Attachments(a.message(t, m.ChatSourceID, m.SourceID).ID)
+	if len(atts) != 2 || atts[0].Status != model.StatusStored {
+		t.Fatalf("attachments = %+v", atts)
+	}
+	if body, _ := os.ReadFile(a.store.MediaPath(atts[0].SHA256)); string(body) != "second file" {
+		t.Errorf("stored %q, want the second file", body)
+	}
+}
+
 func mustChatID(t *testing.T, a *archived, source string) int64 {
 	t.Helper()
 	var id int64

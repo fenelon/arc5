@@ -186,13 +186,13 @@ Content-Type: application/pgp-signature; name="signature.asc"
 	}
 	var got []string
 	for _, part := range p.Parts {
-		got = append(got, part.FileName+"|"+part.MimeType+"|"+part.ContentID+"|"+string(part.Data[:4]))
+		got = append(got, part.Path+"|"+part.FileName+"|"+part.MimeType+"|"+part.ContentID+"|"+string(part.Data[:4]))
 	}
 	want := []string{
-		"image-1.png|image/png|logo@x|\x89PNG",
-		"agenda-monday.pdf|application/pdf||%PDF",
-		"winmail.dat|application/ms-tnef||tnef",
-		"forwarded-message.eml|message/rfc822||From",
+		"1.2|image-1.png|image/png|logo@x|\x89PNG",
+		"2|agenda-monday.pdf|application/pdf||%PDF",
+		"3|winmail.dat|application/ms-tnef||tnef",
+		"4|forwarded-message.eml|message/rfc822||From",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("parts = %q\nwant %q", got, want)
@@ -285,6 +285,86 @@ func TestParseBroken(t *testing.T) {
 	}
 	if p := Parse(nil); !p.Broken || p.Text != Unreadable {
 		t.Errorf("an empty message: %+v", p)
+	}
+}
+
+// A list server adds its footer as a plain part after an HTML body: both
+// are the message's text, in order.
+func TestParseMixedTextParts(t *testing.T) {
+	raw := `
+From: list@example.com
+Subject: Digest
+Message-ID: <digest@example.com>
+Content-Type: multipart/mixed; boundary="m"
+
+--m
+Content-Type: text/html; charset=utf-8
+
+<p>The <b>body</b> of the post.</p>
+--m
+Content-Type: text/plain; charset=utf-8
+
+--
+Members list: https://lists.example.com/members
+--m--
+`
+	p := Parse(crlf(raw))
+	if !strings.HasPrefix(p.Text, "The body of the post.\n\n--") || !strings.HasSuffix(p.Text, "\nMembers list: https://lists.example.com/members") {
+		t.Errorf("text = %q", p.Text)
+	}
+}
+
+// One malformed header line does not make the whole message unreadable.
+func TestParseSkipsABadHeaderLine(t *testing.T) {
+	raw := "From: Dan <dan@example.com>\nthis line has no colon\nSubject: Still read\nMessage-ID: <bad-header@example.com>\n\nThe body.\n"
+	p := Parse(crlf(raw))
+	if p.Broken || p.Subject != "Still read" || p.MessageID != "bad-header@example.com" || p.Text != "The body." {
+		t.Errorf("parsed = %+v", p)
+	}
+}
+
+// A part that cannot be decoded is recorded as damaged, and the parts after
+// it are still read.
+func TestParseKeepsGoingAfterADamagedPart(t *testing.T) {
+	raw := `
+From: a@example.com
+Subject: Damaged
+Message-ID: <damaged@example.com>
+Content-Type: multipart/mixed; boundary="d"
+
+--d
+Content-Type: text/plain
+
+First words.
+--d
+Content-Type: application/pdf; name="broken.pdf"
+Content-Disposition: attachment; filename="broken.pdf"
+Content-Transfer-Encoding: base64
+
+!!!! this is not base64 at all ****
+--d
+Content-Type: application/pdf; name="fine.pdf"
+Content-Disposition: attachment; filename="fine.pdf"
+Content-Transfer-Encoding: base64
+
+` + base64.StdEncoding.EncodeToString([]byte("%PDF fine")) + `
+--d
+Content-Type: text/plain
+
+Last words.
+--d--
+`
+	p := Parse(crlf(raw))
+	if p.Text != "First words.\n\nLast words." {
+		t.Errorf("text = %q", p.Text)
+	}
+	if len(p.Parts) != 2 || p.Parts[0].FileName != "broken.pdf" || p.Parts[0].Damaged == "" ||
+		p.Parts[1].FileName != "fine.pdf" || p.Parts[1].Damaged != "" || string(p.Parts[1].Data) != "%PDF fine" {
+		t.Errorf("parts = %+v", p.Parts)
+	}
+	m := p.Message("t", "i", func(string) bool { return false }, time.Now())
+	if !m.Attachments[0].NoFetch || m.Attachments[0].SourceID != "part:2" || m.Attachments[1].SourceID != "part:3" {
+		t.Errorf("attachments = %+v", m.Attachments)
 	}
 }
 

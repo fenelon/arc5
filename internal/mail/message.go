@@ -46,9 +46,34 @@ func (p Parsed) Message(chatSourceID, sourceID string, own func(address string) 
 		Outgoing: from != "" && own(from),
 	}
 	for _, part := range p.Parts {
-		m.Attachments = append(m.Attachments, model.Attachment{
+		a := model.Attachment{
 			Kind: AttachmentKind(part.MimeType), FileName: part.FileName, MimeType: part.MimeType, Size: int64(len(part.Data)),
-		})
+			SourceID: PartSourceID(part.Path),
+		}
+		if part.Damaged != "" {
+			a.NoFetch, a.NoFetchReason = true, part.Damaged
+		}
+		m.Attachments = append(m.Attachments, a)
 	}
 	return m
+}
+
+// PartSourceID is the attachment source ID of a MIME part.
+func PartSourceID(path string) string { return "part:" + path }
+
+// Part finds a file by its attachment source ID, or, for one stored
+// without, by its position.
+func (p Parsed) Part(sourceID string, position int) (Part, bool) {
+	if sourceID != "" {
+		for _, part := range p.Parts {
+			if PartSourceID(part.Path) == sourceID {
+				return part, true
+			}
+		}
+		return Part{}, false
+	}
+	if position >= 0 && position < len(p.Parts) {
+		return p.Parts[position], true
+	}
+	return Part{}, false
 }

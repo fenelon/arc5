@@ -12,6 +12,7 @@ import (
 	"mime"
 	netmail "net/mail"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -29,6 +30,8 @@ const Unreadable = "This message could not be read"
 
 // Part is an attached file or an inline image.
 type Part struct {
+	Path      string // its MIME part number, as IMAP writes it ("2", "1.2"): stable however the text is chosen
+	Damaged   string // why its content could not be decoded, or ""
 	FileName  string
 	MimeType  string
 	ContentID string // without angle brackets
@@ -64,9 +67,16 @@ var addressHeaders = []struct {
 // Parse reads a message. It never fails: what cannot be read is left out,
 // and a message whose text cannot be read at all gets Unreadable as its text.
 func Parse(raw []byte) Parsed {
-	e, err := message.Read(bytes.NewReader(raw))
-	if len(bytes.TrimSpace(raw)) == 0 || e == nil || (err != nil && !message.IsUnknownCharset(err) && !message.IsUnknownEncoding(err)) {
+	if len(bytes.TrimSpace(raw)) == 0 {
 		return Parsed{Broken: true, Text: Unreadable}
+	}
+	e, err := message.Read(bytes.NewReader(raw))
+	if e == nil || (err != nil && !message.IsUnknownCharset(err) && !message.IsUnknownEncoding(err)) {
+		// A malformed header line stops the reader: read it again without them.
+		e, err = message.Read(bytes.NewReader(withoutBadHeaderLines(raw)))
+		if e == nil || (err != nil && !message.IsUnknownCharset(err) && !message.IsUnknownEncoding(err)) {
+			return Parsed{Broken: true, Text: Unreadable}
+		}
 	}
 	h := gomail.Header{Header: e.Header}
 	p := Parsed{}
@@ -87,13 +97,44 @@ func Parse(raw []byte) Parsed {
 	}
 
 	w := &walker{}
-	walkErr := w.entity(e, 0)
+	walkErr := w.entity(e, "", 0)
 	p.Text = w.text()
 	p.Parts = w.parts
 	if p.Text == "" && walkErr != nil && len(p.Parts) == 0 {
 		p.Broken, p.Text = true, Unreadable
 	}
 	return p
+}
+
+var headerField = regexp.MustCompile(`^[!-9;-~]+:`)
+
+// withoutBadHeaderLines drops header lines that are neither a field nor the
+// continuation of a kept one.
+func withoutBadHeaderLines(raw []byte) []byte {
+	end := bytes.Index(raw, []byte("\r\n\r\n"))
+	sep := []byte("\r\n")
+	if end < 0 {
+		if end = bytes.Index(raw, []byte("\n\n")); end < 0 {
+			return append([]byte("\r\n"), raw...) // no header at all: it is all body
+		}
+		sep = []byte("\n")
+	}
+	var out [][]byte
+	keeping := false
+	for _, line := range bytes.Split(raw[:end], sep) {
+		switch {
+		case len(line) > 0 && (line[0] == ' ' || line[0] == '\t'):
+			if keeping {
+				out = append(out, line)
+			}
+		case headerField.Match(line):
+			out = append(out, line)
+			keeping = true
+		default:
+			keeping = false
+		}
+	}
+	return append(bytes.Join(out, sep), raw[end:]...)
 }
 
 var bracketed = regexp.MustCompile(`<([^<>\s]+)>`)
@@ -159,31 +200,33 @@ func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // walker collects a message's text and parts.
 type walker struct {
-	plain []string
-	html  []htmlBody
+	texts []textPart // in document order
 	parts []Part
 }
 
-// htmlBody is an HTML part. charset is "utf-8" when the MIME header named a
-// charset (go-message has already converted it), else "", and the HTML's own
-// <meta> decides.
-type htmlBody struct {
-	data    []byte
-	charset string
+// textPart is a body part of the message's text: plain, or HTML to convert.
+type textPart struct {
+	plain   string
+	html    []byte
+	isHTML  bool
+	charset string // for HTML: "utf-8" when the MIME header named a charset (go-message has converted it), else "" and the HTML's own <meta> decides
+}
+
+func (t textPart) String() string {
+	if t.isHTML {
+		return HTMLText(t.html, t.charset)
+	}
+	return strings.TrimSpace(t.plain)
 }
 
 func (w *walker) text() string {
-	plain := strings.TrimSpace(strings.Join(w.plain, "\n\n"))
-	if len(w.html) > 0 && (plain == "" || isStub(plain)) {
-		var texts []string
-		for _, h := range w.html {
-			if t := HTMLText(h.data, h.charset); t != "" {
-				texts = append(texts, t)
-			}
+	var out []string
+	for _, t := range w.texts {
+		if s := t.String(); s != "" {
+			out = append(out, s)
 		}
-		return strings.Join(texts, "\n\n")
 	}
-	return plain
+	return strings.Join(out, "\n\n")
 }
 
 // isStub reports whether a plain part only says to read the HTML one, as
@@ -205,9 +248,21 @@ const maxDepth = 20
 
 var errTooDeep = errors.New("mail: parts nested too deep")
 
-// entity walks one MIME entity. It returns the first error met, after
-// keeping everything it could read.
-func (w *walker) entity(e *message.Entity, depth int) error {
+// childPath is the IMAP-style path of the n-th part (from 1) of a part.
+func childPath(parent string, n int) string {
+	if parent == "" {
+		return strconv.Itoa(n)
+	}
+	return parent + "." + strconv.Itoa(n)
+}
+
+// damaged explains a part that could not be decoded.
+const damaged = "this part of the message is damaged and could not be decoded"
+
+// entity walks one MIME entity at path ("" for the message itself, whose
+// single body is part "1"). It returns the first error met, after keeping
+// everything it could read.
+func (w *walker) entity(e *message.Entity, path string, depth int) error {
 	if depth > maxDepth {
 		return errTooDeep
 	}
@@ -216,7 +271,10 @@ func (w *walker) entity(e *message.Entity, depth int) error {
 		mediaType, params = "text/plain", map[string]string{}
 	}
 	if strings.HasPrefix(mediaType, "multipart/") {
-		return w.multipart(e, mediaType, depth)
+		return w.multipart(e, mediaType, path, depth)
+	}
+	if path == "" {
+		path = "1"
 	}
 	disposition, dparams, _ := e.Header.ContentDisposition()
 	name := dparams["filename"]
@@ -229,7 +287,7 @@ func (w *walker) entity(e *message.Entity, depth int) error {
 		if params["charset"] != "" && charsetKnown(params["charset"]) {
 			charset = "utf-8"
 		}
-		w.html = append(w.html, htmlBody{data: body, charset: charset})
+		w.texts = append(w.texts, textPart{html: body, isHTML: true, charset: charset})
 		return readErr
 	}
 	if mediaType == "text/plain" && disposition != "attachment" && name == "" {
@@ -240,7 +298,7 @@ func (w *walker) entity(e *message.Entity, depth int) error {
 		if strings.EqualFold(params["format"], "flowed") {
 			text = unflow(text, strings.EqualFold(params["delsp"], "yes"))
 		}
-		w.plain = append(w.plain, text)
+		w.texts = append(w.texts, textPart{plain: text})
 		return readErr
 	}
 	switch mediaType {
@@ -249,13 +307,17 @@ func (w *walker) entity(e *message.Entity, depth int) error {
 	}
 	cid := strings.Trim(strings.TrimSpace(e.Header.Get("Content-Id")), "<>")
 	if name == "" {
-		name = w.nameFor(mediaType, e)
+		name = w.nameFor(mediaType)
 	}
-	w.parts = append(w.parts, Part{
-		FileName: name, MimeType: mediaType, ContentID: cid,
+	part := Part{
+		Path: path, FileName: name, MimeType: mediaType, ContentID: cid,
 		Inline: disposition == "inline" || (disposition == "" && cid != ""), Data: body,
-	})
-	return readErr
+	}
+	if readErr != nil {
+		part.Damaged = damaged
+	}
+	w.parts = append(w.parts, part)
+	return nil // recorded as damaged; the walk goes on
 }
 
 // charsetKnown reports whether go-message converted a part in this charset
@@ -266,7 +328,7 @@ func charsetKnown(name string) bool {
 }
 
 // nameFor makes up a file name for a part that has none.
-func (w *walker) nameFor(mediaType string, e *message.Entity) string {
+func (w *walker) nameFor(mediaType string) string {
 	if mediaType == "message/rfc822" {
 		return "forwarded-message.eml"
 	}
@@ -288,62 +350,69 @@ func (w *walker) nameFor(mediaType string, e *message.Entity) string {
 	return fmt.Sprintf("%s-%d%s", kind, len(w.parts)+1, ext)
 }
 
-func (w *walker) multipart(e *message.Entity, mediaType string, depth int) error {
+// multipart walks the parts of a multipart entity. In multipart/alternative
+// one alternative gives the text: the plain one unless it is empty or only
+// says to read the HTML. Elsewhere every text part counts, in order. Files
+// from every part are kept. A part that fails is passed over; only a part
+// list that cannot be read further ends the walk.
+func (w *walker) multipart(e *message.Entity, mediaType, path string, depth int) error {
 	mr := e.MultipartReader()
 	if mr == nil {
 		return errors.New("mail: multipart without a boundary")
 	}
-	if mediaType != "multipart/alternative" {
-		for {
-			part, err := mr.NextPart()
-			if err == io.EOF {
-				return nil
-			}
-			if part == nil {
-				return err
-			}
-			if err := w.entity(part, depth+1); err != nil {
-				return err
-			}
+	var firstErr error
+	keep := func(err error) {
+		if err != nil && firstErr == nil {
+			firstErr = err
 		}
 	}
-	// One of the alternatives gives the text: the plain one unless it is
-	// empty or a stub. Files from every alternative are kept.
 	var choices []*walker
-	var firstErr error
-	for {
+	for n := 1; ; n++ {
 		part, err := mr.NextPart()
 		if err == io.EOF {
 			break
 		}
 		if part == nil {
-			firstErr = err
+			keep(err)
 			break
 		}
-		c := &walker{}
-		if err := c.entity(part, depth+1); err != nil && firstErr == nil {
-			firstErr = err
+		c := w
+		if mediaType == "multipart/alternative" {
+			c = &walker{parts: w.parts}
 		}
-		choices = append(choices, c)
-		w.parts = append(w.parts, c.parts...)
+		keep(c.entity(part, childPath(path, n), depth+1))
+		if mediaType == "multipart/alternative" {
+			w.parts = c.parts
+			choices = append(choices, c)
+		}
+	}
+	if mediaType != "multipart/alternative" {
+		return firstErr
 	}
 	var plain, html *walker
 	for _, c := range choices {
-		joined := strings.TrimSpace(strings.Join(c.plain, ""))
-		if plain == nil && joined != "" && !isStub(joined) {
+		hasHTML, plainText := false, ""
+		for _, t := range c.texts {
+			if t.isHTML {
+				hasHTML = true
+			} else {
+				plainText += t.plain
+			}
+		}
+		if plain == nil && !hasHTML && strings.TrimSpace(plainText) != "" && !isStub(strings.TrimSpace(plainText)) {
 			plain = c
 		}
-		if html == nil && len(c.html) > 0 {
+		if html == nil && hasHTML {
 			html = c
 		}
 	}
 	switch {
 	case plain != nil:
-		w.plain = append(w.plain, plain.plain...)
+		w.texts = append(w.texts, plain.texts...)
 	case html != nil:
-		w.html = append(w.html, html.html...)
+		w.texts = append(w.texts, html.texts...)
 	case len(choices) > 0:
-		w.plain = append(w.plain, choices[0].plain...)
+		w.texts = append(w.texts, choices[0].texts...)
 	}
 	return firstErr
 }

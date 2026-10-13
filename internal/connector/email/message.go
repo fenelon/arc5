@@ -77,8 +77,8 @@ func Store(sink connector.MailSink, raw []byte, received time.Time, own func(add
 		return "", "", err
 	}
 	for _, ref := range pending {
-		if ref.Position < len(p.Parts) {
-			if err := sink.PutMedia(ref, bytes.NewReader(p.Parts[ref.Position].Data)); err != nil {
+		if part, ok := p.Part(ref.SourceID, ref.Position); ok && part.Damaged == "" {
+			if err := sink.PutMedia(ref, bytes.NewReader(part.Data)); err != nil {
 				return "", "", err
 			}
 		}
@@ -98,9 +98,12 @@ func FetchFromOriginal(sink connector.MailSink, ref model.AttachmentRef) error {
 	if err != nil {
 		return fmt.Errorf("%w: %v", connector.ErrStorage, err)
 	}
-	p := mail.Parse(raw)
-	if ref.Position < 0 || ref.Position >= len(p.Parts) {
+	part, ok := mail.Parse(raw).Part(ref.SourceID, ref.Position)
+	switch {
+	case !ok:
 		return sink.SetAttachmentStatus(ref, model.StatusUnavailable, "the original message does not hold this file")
+	case part.Damaged != "":
+		return sink.SetAttachmentStatus(ref, model.StatusUnavailable, part.Damaged)
 	}
-	return sink.PutMedia(ref, bytes.NewReader(p.Parts[ref.Position].Data))
+	return sink.PutMedia(ref, bytes.NewReader(part.Data))
 }
