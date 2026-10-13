@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -154,7 +155,21 @@ func (s *Server) liveLocked(w http.ResponseWriter, r *http.Request) (archive.Acc
 // ConnectorChoice is a kind of source the owner can add.
 type ConnectorChoice struct {
 	Name, Title, Logo string
+	Blurb             string // one line on what it archives, or ""
 	Checked           bool
+}
+
+// blurbFor says in one line what a kind of source archives.
+func blurbFor(name string) string {
+	switch name {
+	case "telegram":
+		return "Private chats and groups, with their photos, edits and deletions."
+	case "imap", "email":
+		return "A mailbox, such as Gmail, Fastmail or iCloud, with its folders and attachments."
+	case "whatsapp":
+		return "Chats and groups from your phone's WhatsApp."
+	}
+	return ""
 }
 
 type addPage struct {
@@ -168,7 +183,7 @@ func (s *Server) addable() []ConnectorChoice {
 	var out []ConnectorChoice
 	for _, info := range s.deps.Registry.Infos() {
 		if !info.Hidden {
-			out = append(out, ConnectorChoice{Name: info.Name, Title: info.Title, Logo: logoFor(info.Name)})
+			out = append(out, ConnectorChoice{Name: info.Name, Title: info.Title, Logo: logoFor(info.Name), Blurb: blurbFor(info.Name)})
 		}
 	}
 	return out
@@ -181,6 +196,9 @@ func (s *Server) addForm(w http.ResponseWriter, r *http.Request, sess archive.Se
 		return
 	}
 	data := addPage{Page: s.chrome(r, sess, "Add a source", all, ""), Choices: s.addable(), Name: name, Problem: problem}
+	if !slices.ContainsFunc(data.Choices, func(c ConnectorChoice) bool { return c.Name == chosen }) {
+		chosen = "" // unknown or hidden: the first is chosen
+	}
 	for i := range data.Choices {
 		data.Choices[i].Checked = data.Choices[i].Name == chosen || (chosen == "" && i == 0)
 	}
@@ -188,7 +206,7 @@ func (s *Server) addForm(w http.ResponseWriter, r *http.Request, sess archive.Se
 }
 
 func (s *Server) newSourceForm(w http.ResponseWriter, r *http.Request, sess archive.Session) {
-	s.addForm(w, r, sess, http.StatusOK, "", "", "")
+	s.addForm(w, r, sess, http.StatusOK, r.URL.Query().Get("connector"), "", "")
 }
 
 // addSource creates the account switched off, then runs its connector's
