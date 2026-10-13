@@ -67,6 +67,9 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 	// changed is set when the message's searchable content (text or
 	// attachment names) is new, so the index row must be rewritten.
 	changed := false
+	// olderCopy is set when the source dated a stored edit later than this
+	// copy, which must then not replace attachments either.
+	olderCopy := false
 
 	var (
 		id          int64
@@ -100,6 +103,7 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 		if storedDated != 0 {
 			sourceEdit = storedEdit.Int64
 		}
+		olderCopy = sourceEdit > 0 && incomingEdit < sourceEdit
 		if text != storedText {
 			stale, err := staleText(tx, id, text, incomingEdit, sourceEdit)
 			if err != nil {
@@ -138,11 +142,13 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 		case a.Size > limit:
 			status, reason = model.StatusSkipped, reasonOverCap
 		}
-		replaced, err := replaceAttachment(tx, id, position, clean(a.SourceID), editTime(m.EditedAt, s.now()))
-		if err != nil {
-			return nil, err
+		if !olderCopy {
+			replaced, err := replaceAttachment(tx, id, position, clean(a.SourceID), editTime(m.EditedAt, s.now()))
+			if err != nil {
+				return nil, err
+			}
+			changed = changed || replaced
 		}
-		changed = changed || replaced
 		res, err := tx.Exec(`
 			INSERT INTO attachments (message_id, position, kind, file_name, mime_type, size, status, reason, ephemeral, source_id)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

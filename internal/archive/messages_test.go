@@ -601,3 +601,24 @@ func TestAStaleRefCannotTouchTheReplacement(t *testing.T) {
 		t.Errorf("a ref without an identity: %v", err)
 	}
 }
+
+// Review finding: replaying the original after a dated edit made the first
+// photo current again.
+func TestAnOlderCopyDoesNotRevertAnEditedPhoto(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	original := textMsg("1", "look")
+	original.Attachments = []model.Attachment{{Kind: model.AttachPhoto, FileName: "x.jpg", Size: 1, SourceID: "photo:x"}}
+	mustUpsert(t, s, acc, original)
+	edited := original
+	edited.Attachments = []model.Attachment{{Kind: model.AttachPhoto, FileName: "y.jpg", Size: 1, SourceID: "photo:y"}}
+	edited.EditedAt = t0.Add(time.Hour)
+	mustUpsert(t, s, acc, edited)
+	mustUpsert(t, s, acc, original) // an older copy, as a backfill page fetched before the edit
+	id := mustMessage(t, s, acc, "1").ID
+	current, _ := s.Attachments(id)
+	replaced, _ := s.ReplacedAttachments(id)
+	if len(current) != 1 || current[0].FileName != "y.jpg" || len(replaced) != 1 {
+		t.Errorf("current %+v, replaced %+v; want y current and x replaced once", current, replaced)
+	}
+}
