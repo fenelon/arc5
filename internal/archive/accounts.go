@@ -102,18 +102,23 @@ func (s *Store) UpdateAccountSettings(id int64, settings map[string]string) erro
 	return s.updateAccount(id, `UPDATE accounts SET settings = ? WHERE id = ?`, body, id)
 }
 
-// SetAccountEnabled switches an account on or off. A removed account stays off.
+// SetAccountEnabled switches an account on or off. A removed account stays
+// off: the check is part of the update, so a removal cannot slip between them.
 func (s *Store) SetAccountEnabled(id int64, enabled bool) error {
-	if enabled {
-		acc, err := s.Account(id)
-		if err != nil {
-			return err
-		}
-		if !acc.RemovedAt.IsZero() {
-			return fmt.Errorf("%w: account %d was removed", ErrInvalid, id)
-		}
+	if !enabled {
+		return s.updateAccount(id, `UPDATE accounts SET enabled = 0 WHERE id = ?`, id)
 	}
-	return s.updateAccount(id, `UPDATE accounts SET enabled = ? WHERE id = ?`, b2i(enabled), id)
+	res, err := s.w.Exec(`UPDATE accounts SET enabled = 1 WHERE id = ? AND removed_at IS NULL`, id)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 1 {
+		return err
+	}
+	if _, err := s.Account(id); err != nil {
+		return err
+	}
+	return fmt.Errorf("%w: account %d was removed", ErrInvalid, id)
 }
 
 // maxLabelRunes keeps a source's name to what fits on its tile and more.

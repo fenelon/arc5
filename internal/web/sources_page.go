@@ -356,10 +356,11 @@ func (s *Server) saveSourceSettings(w http.ResponseWriter, r *http.Request, sess
 }
 
 func (s *Server) signOutSource(w http.ResponseWriter, r *http.Request, _ archive.Session) {
-	acc, ok := s.live(w, r)
+	acc, unlock, ok := s.liveLocked(w, r)
 	if !ok {
 		return
 	}
+	defer unlock()
 	c, known := s.newConnector(acc.Connector)
 	if _, can := c.(connector.SignOuter); !known || !can {
 		http.NotFound(w, r)
@@ -378,10 +379,14 @@ func (s *Server) signOutSource(w http.ResponseWriter, r *http.Request, _ archive
 // removeSource stops a source for good and forgets its login. Its messages
 // stay in the archive.
 func (s *Server) removeSource(w http.ResponseWriter, r *http.Request, _ archive.Session) {
-	acc, ok := s.live(w, r)
+	acc, unlock, ok := s.liveLocked(w, r)
 	if !ok {
 		return
 	}
+	defer unlock()
+	// End a login in progress: a step in flight has finished by now, as it
+	// holds the same lock, and none can start until the removal is done.
+	s.flows.drop(acc.ID)
 	if err := s.deps.Store.SetAccountEnabled(acc.ID, false); err != nil {
 		s.fail(w, err)
 		return

@@ -65,7 +65,8 @@ type Server struct {
 	static  fs.FS
 	version string
 	mux     *http.ServeMux
-	flows   flows // logins in progress on the Sources page
+	flows   flows        // logins in progress on the Sources page
+	logins  accountLocks // one login, sign-out or removal of a source at a time
 }
 
 func New(deps Deps) (*Server, error) {

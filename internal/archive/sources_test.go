@@ -58,6 +58,11 @@ func TestRemoveAccountKeepsItsArchive(t *testing.T) {
 	if err := s.SetAccountEnabled(acc, true); !errors.Is(err, ErrInvalid) {
 		t.Errorf("switching a removed account back on: %v, want ErrInvalid", err)
 	}
+	for _, on := range []bool{true, false} {
+		if err := s.SetAccountEnabled(9999, on); !errors.Is(err, ErrNotFound) {
+			t.Errorf("switching an unknown account %v: %v, want ErrNotFound", on, err)
+		}
+	}
 }
 
 func TestAccountChatsAndArchiving(t *testing.T) {
