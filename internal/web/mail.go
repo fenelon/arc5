@@ -180,7 +180,6 @@ func (s *Server) mailRoute(w http.ResponseWriter, r *http.Request, sess archive.
 			return true
 		}
 		data.Thread, data.Title = thread, thread.Title
-		data.Results = results
 	case results != nil:
 		results.Mail = true
 		data.Results = results
