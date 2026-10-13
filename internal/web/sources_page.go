@@ -41,6 +41,7 @@ type SourcePanel struct {
 	Name, Service, Logo string
 	OpenHref, ChatsHref string
 	Chats               int
+	Mail                bool   // a mailbox: folders rather than chats are chosen
 	Removed             string // the day it was removed, or ""
 	Status              string
 	Progress            *ProgressView
@@ -168,11 +169,19 @@ func (s *Server) panel(src source) (*SourcePanel, error) {
 		ID: acc.ID, Name: acc.Label, Service: src.Info.Title, Logo: logoFor(src.Info.Name),
 		OpenHref: "/s/" + src.key(), ChatsHref: fmt.Sprintf("/sources/%d/chats", acc.ID), Status: src.Detail,
 	}
-	chats, err := s.deps.Store.AccountChats(acc.ID)
-	if err != nil {
-		return nil, err
+	if src.Info.Display == connector.DisplayMail {
+		folders, err := s.deps.Store.AccountFolders(acc.ID)
+		if err != nil {
+			return nil, err
+		}
+		p.Chats, p.Mail = len(folders), true
+	} else {
+		chats, err := s.deps.Store.AccountChats(acc.ID)
+		if err != nil {
+			return nil, err
+		}
+		p.Chats = len(chats)
 	}
-	p.Chats = len(chats)
 	if !acc.RemovedAt.IsZero() {
 		p.Removed = acc.RemovedAt.In(s.deps.Location).Format("2 January 2006")
 		return p, nil

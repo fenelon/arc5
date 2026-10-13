@@ -27,15 +27,15 @@
 <a class="thread__back" href="{{.BackHref}}">{{.BackLabel}}</a>
 <h1 class="thread__title">{{.Title}}</h1>
 <p class="thread__summary">{{.Summary}}</p>
-<div class="cards" data-controller="scroll" data-scroll-to-value="{{range .Cards}}{{if .Target}}{{.Anchor}}{{end}}{{end}}">
-{{range .Cards}}<details class="card{{if .Own}} card--own{{end}}{{if .Target}} card--target{{end}}" id="{{.Anchor}}"{{if .Open}} open{{end}}>
-<summary class="card__head"><span class="avatar card__avatar" aria-hidden="true">{{.Initials}}</span><span class="card__who"><span class="card__line"><span class="card__name">{{.Name}}</span>{{if and .Address (ne .Address .Name)}} <span class="card__address">{{.Address}}</span>{{end}}</span>{{with .To}}<span class="card__to">{{.}}</span>{{end}}<span class="card__snippet">{{if .Deleted}}<span class="tag tag--warn">{{.Deleted}}</span> {{end}}{{.Snippet}}</span></span><span class="card__meta"><span>{{.When}}</span><span>{{.Position}}</span></span></summary>
-<div class="card__body">{{if .Deleted}}<p class="card__deleted"><span class="tag tag--warn">{{.Deleted}}</span></p>{{end}}
-{{if .Text}}<div class="card__text">{{if .Marked}}{{template "pieces" .Marked}}{{else}}{{.Text}}{{end}}</div>{{end}}
+<div class="mcards" data-controller="scroll" data-scroll-to-value="{{range .Cards}}{{if .Target}}{{.Anchor}}{{end}}{{end}}">
+{{range .Cards}}<details class="mcard{{if .Own}} mcard--own{{end}}{{if .Target}} mcard--target{{end}}" id="{{.Anchor}}"{{if .Open}} open{{end}}>
+<summary class="mcard__head"><span class="avatar mcard__avatar" aria-hidden="true">{{.Initials}}</span><span class="mcard__who"><span class="mcard__line"><span class="mcard__name">{{.Name}}</span>{{if and .Address (ne .Address .Name)}} <span class="mcard__address">{{.Address}}</span>{{end}}</span>{{with .To}}<span class="mcard__to">{{.}}</span>{{end}}<span class="mcard__snippet">{{if .Deleted}}<span class="tag tag--warn">{{.Deleted}}</span> {{end}}{{.Snippet}}</span></span><span class="mcard__meta"><span>{{.When}}</span><span>{{.Position}}</span></span></summary>
+<div class="mcard__body">{{if .Deleted}}<p class="mcard__deleted"><span class="tag tag--warn">{{.Deleted}}</span></p>{{end}}
+{{if .Text}}<div class="mcard__text">{{if .Marked}}{{template "pieces" .Marked}}{{else}}{{.Text}}{{end}}</div>{{end}}
 {{if .Quote}}<details class="quote"><summary>Show quoted text</summary><div class="quote__text">{{with .Lead}}{{.}}
 {{end}}{{.Quote}}</div></details>{{end}}
 {{range .Files}}<div class="mfile"><svg class="mfile__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.5 8.5a5 5 0 01-7-7L14 4.5a3.5 3.5 0 015 5L10.5 18a2 2 0 01-3-3L15 7.5"/></svg><span class="mfile__text"><span class="mfile__name">{{.Name}}</span><span class="mfile__detail">{{.Detail}}</span></span>{{if or (eq .Mode "file") (eq .Mode "image") (eq .Mode "audio") (eq .Mode "video")}}<a class="button" href="{{.URL}}">Open</a>{{else if or (eq .Mode "skipped") (eq .Mode "failed")}}<form method="post" action="{{.URL}}/fetch"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="back" value="{{$.Thread.Self}}"><button class="button" type="submit">{{if eq .Mode "failed"}}Try again{{else}}Fetch now{{end}}</button></form>{{end}}</div>
-{{end}}{{with .OriginalHref}}<p class="card__original"><a href="{{.}}">Download original (.eml)</a></p>{{end}}
+{{end}}{{with .OriginalHref}}<p class="mcard__original"><a href="{{.}}">Download original (.eml)</a></p>{{end}}
 </div>
 </details>
 {{end}}</div>

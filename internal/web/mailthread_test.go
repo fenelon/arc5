@@ -17,18 +17,18 @@ func TestThreadView(t *testing.T) {
 		`<h1 class="thread__title">Monday planning, room 4</h1>`,
 		"5 messages, 25 to 27 September 2026. The three earliest are folded; select one to open it.",
 		// Folded: one line with the start of the text.
-		`<span class="card__name">Dan Whitfield</span>`, "dan.whitfield@example.com", "25 Sep, 09:12", "1 of 5",
+		`<span class="mcard__name">Dan Whitfield</span>`, "dan.whitfield@example.com", "25 Sep, 09:12", "1 of 5",
 		"Can we move the planning session to Monday?",
-		`<span class="card__name">You</span>`, "2 of 5",
+		`<span class="mcard__name">You</span>`, "2 of 5",
 		// Priya's message was deleted at source.
 		`<span class="tag tag--warn">Deleted at source</span>`, "Fine by me, though I have to leave by noon.",
 		// Open: recipients, full date, the text and the agenda's card.
 		"to me@example.org, priya.nair@example.com", "27 Sep 2026, 18:40", "4 of 5",
 		"Room 4 is booked from ten.", "agenda-monday.pdf", "PDF, 82.0 KB", `>Open</a>`,
 		"Confirmed. Budget first, then the room plan.", "5 of 5",
-		"Download original (.eml)", `class="card card--own"`,
+		"Download original (.eml)", `class="mcard mcard--own"`,
 	)
-	if n := strings.Count(body, `<details class="card`); n != 5 {
+	if n := strings.Count(body, `<details class="mcard`); n != 5 {
 		t.Errorf("%d cards, want 5", n)
 	}
 	if n := strings.Count(body, " open>"); n != 2 {
@@ -69,7 +69,7 @@ func TestThreadOpenedFromSearch(t *testing.T) {
 	var first int64
 	m.store.Reader().QueryRow(`SELECT MIN(id) FROM messages WHERE chat_id = ?`, planning).Scan(&first)
 	body := m.page(fmt.Sprintf("/s/%d/c/%d?at=%d&q=audit", m.box, planning, first))
-	has(t, body, fmt.Sprintf(`id="m%d" open>`, first), "card--target", `<mark class="hit">audit</mark>`,
+	has(t, body, fmt.Sprintf(`id="m%d" open>`, first), "mcard--target", `<mark class="hit">audit</mark>`,
 		`value="audit"`, fmt.Sprintf(`<a class="thread__back" href="/s/%d?q=audit">Back to results</a>`, m.box))
 	if n := strings.Count(body, " open>"); n != 3 {
 		t.Errorf("%d cards open, want the target and the last two", n)
