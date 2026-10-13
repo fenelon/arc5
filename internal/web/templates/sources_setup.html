@@ -3,7 +3,7 @@
 {{template "topbar" .}}
 {{template "banner" .}}
 <main class="plain plain--form">
-<a class="back-link" href="/sources"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Back to sources</a>
+{{template "back" (dict "Href" "/sources" "Label" "Back to sources")}}
 <h1>Add a source</h1>
 {{if .Choices}}<p class="plain__lead">Choose the kind of account and name it. Its login comes next.</p>
 <form class="card" method="post" action="/sources/new">
@@ -24,7 +24,7 @@
 <body class="app">
 {{template "topbar" .}}
 <main class="plain plain--settings">
-<p><a class="panel__link" href="/sources/{{.AccountID}}">Back to {{.Name}}</a></p>
+{{template "back" (dict "Href" (printf "/sources/%d" .AccountID) "Label" (printf "Back to %s" .Name))}}
 <h1>Log in to {{.Name}}</h1>
 <form class="card" method="post" action="/sources/{{.AccountID}}/login">
 <input type="hidden" name="csrf" value="{{.CSRF}}">

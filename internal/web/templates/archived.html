@@ -3,7 +3,7 @@
 {{template "topbar" .}}
 {{template "banner" .}}
 <main class="plain plain--settings">
-<p><a class="panel__link" href="/sources/{{.AccountID}}">Back to {{.Name}}</a></p>
+{{template "back" (dict "Href" (printf "/sources/%d" .AccountID) "Label" (printf "Back to %s" .Name))}}
 {{if .Mail}}<h1>Folders of {{.Name}}</h1>
 <p>Ticked folders are archived. A folder switched off keeps what was archived before; nothing new is saved from it. A message counts as deleted at source only when it has left every archived folder it was in.</p>{{else}}<h1>Chats of {{.Name}}</h1>
 <p>Ticked chats are archived. A chat switched off keeps what was archived before; nothing new is saved from it.</p>{{end}}

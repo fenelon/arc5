@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -34,7 +35,8 @@ type Card struct {
 	To, When, Position, Deleted     string
 	Snippet                         string
 	Text, Lead, Quote               string
-	Marked                          []Piece // Text with the search's words marked
+	TextParts, QuoteParts           []TextPart // Text, and Lead with Quote, with links made short
+	Marked                          []Piece    // Text with the search's words marked
 	Files                           []MailFile
 	OriginalHref                    string
 	Open, Own, Target               bool
@@ -176,6 +178,14 @@ func (s *Server) threadView(r *http.Request, sel selection, folder mailFolder, c
 		}
 		c.Snippet = snippet(m.Text)
 		c.Text, c.Lead, c.Quote = splitQuote(m.Text)
+		c.TextParts = linkParts(c.Text)
+		if c.Quote != "" {
+			quote := c.Quote
+			if c.Lead != "" {
+				quote = c.Lead + "\n" + quote
+			}
+			c.QuoteParts = linkParts(quote)
+		}
 		if c.Target && keep != "" {
 			c.Marked = pieces(s.deps.Index.Searcher().Highlight(q, c.Text))
 		}
@@ -236,4 +246,55 @@ func (s *Server) serveOriginal(w http.ResponseWriter, r *http.Request, _ archive
 	h.Set("Content-Security-Policy", mediaPolicy)
 	h.Set("Cache-Control", "private, no-store")
 	http.ServeContent(w, r, "", time.Time{}, f)
+}
+
+// TextPart is a run of mail text, or a link in it: Href is set for a link,
+// shown as Label.
+type TextPart struct {
+	Text, Href, Label string
+}
+
+// linkPattern finds web addresses in text, with the angle brackets mail
+// writes around an address after a link's words.
+var linkPattern = regexp.MustCompile(`<https?://[^\s<>"]+>|https?://[^\s<>"]+`)
+
+// linkLabel is how long a link's shown address may be.
+const linkLabel = 38
+
+// linkParts splits text into runs and links to web addresses, so a long
+// tracking address reads as a short link. Only http and https become links.
+func linkParts(text string) []TextPart {
+	var out []TextPart
+	plain := func(s string) {
+		if s == "" {
+			return
+		}
+		if n := len(out); n > 0 && out[n-1].Href == "" {
+			out[n-1].Text += s
+			return
+		}
+		out = append(out, TextPart{Text: s})
+	}
+	at := 0
+	for _, m := range linkPattern.FindAllStringIndex(text, -1) {
+		start, end := m[0], m[1]
+		href := text[start:end]
+		if strings.HasPrefix(href, "<") {
+			href = href[1 : len(href)-1]
+		} else {
+			// Punctuation after an address ends the sentence, not the address.
+			trimmed := strings.TrimRight(href, ".,;:!?)]}'")
+			end -= len(href) - len(trimmed)
+			href = trimmed
+		}
+		plain(text[at:start])
+		label := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(href, "https://"), "http://"), "www.")
+		if r := []rune(label); len(r) > linkLabel {
+			label = string(r[:linkLabel-1]) + "…"
+		}
+		out = append(out, TextPart{Href: href, Label: label})
+		at = end
+	}
+	plain(text[at:])
+	return out
 }

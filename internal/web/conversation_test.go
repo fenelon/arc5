@@ -433,7 +433,7 @@ func TestForwardsAndRepliesAreMarked(t *testing.T) {
 	body := s.page(fmt.Sprintf("/s/%d/c/%d", acc, s.chatID(acc, "Infra")))
 	has(t, body,
 		`<div class="fwd"><div class="fwd__head">Forwarded from <span class="fwd__name">Mikhail</span></div>`,
-		fmt.Sprintf(`<a class="quote" href="#m%d"><span class="quote__name">Anton U</span><span class="quote__text">Where are the copies kept?</span></a>`, question),
-		`<span class="quote__name">Mikhail</span><span class="quote__text">Everything is geo-replicated</span>`,
-		`<p class="quote quote--missing">Reply to a message not in the archive</p>`)
+		fmt.Sprintf(`<a class="reply" href="#m%d"><span class="reply__name">Anton U</span><span class="reply__text">Where are the copies kept?</span></a>`, question),
+		`<span class="reply__name">Mikhail</span><span class="reply__text">Everything is geo-replicated</span>`,
+		`<p class="reply reply--missing">Reply to a message not in the archive</p>`)
 }
