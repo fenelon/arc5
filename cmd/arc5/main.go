@@ -18,6 +18,7 @@ import (
 	"github.com/fenelon/arc5/internal/config"
 	"github.com/fenelon/arc5/internal/connector"
 	"github.com/fenelon/arc5/internal/connector/demo"
+	"github.com/fenelon/arc5/internal/connector/telegram"
 	"github.com/fenelon/arc5/internal/indexer"
 	"github.com/fenelon/arc5/internal/search"
 	"github.com/fenelon/arc5/internal/web"
@@ -28,9 +29,12 @@ const usage = `usage:
   arc5 reindex [--data folder] [--languages en,ru,es]
   arc5 demo    [--data folder]`
 
-// The demo connector is registered once per process, so the sample archive's
-// source shows as live.
-func init() { demo.Register(connector.Default) }
+// The connectors are registered once per process. The demo's is there so the
+// sample archive's source shows as live; it is never offered as a new source.
+func init() {
+	demo.Register(connector.Default)
+	telegram.Register(connector.Default)
+}
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

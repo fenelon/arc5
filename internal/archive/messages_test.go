@@ -552,3 +552,18 @@ func TestReplacedMediaCannotBeRequested(t *testing.T) {
 		t.Errorf("requesting a replaced attachment: %v, want ErrNotFound", err)
 	}
 }
+
+func TestReplacedMediaKeepsTheEditsDate(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	m := textMsg("1", "look")
+	m.Attachments = []model.Attachment{{Kind: model.AttachPhoto, Size: 1, SourceID: "photo:1"}}
+	mustUpsert(t, s, acc, m)
+	m.Attachments[0].SourceID = "photo:2"
+	m.EditedAt = t0.Add(time.Hour)
+	mustUpsert(t, s, acc, m)
+	replaced, err := s.ReplacedAttachments(mustMessage(t, s, acc, "1").ID)
+	if err != nil || len(replaced) != 1 || !replaced[0].Replaced.Equal(t0.Add(time.Hour)) {
+		t.Errorf("replaced = %+v, %v; want it replaced at the edit's time", replaced, err)
+	}
+}

@@ -138,7 +138,7 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 		case a.Size > limit:
 			status, reason = model.StatusSkipped, reasonOverCap
 		}
-		replaced, err := replaceAttachment(tx, id, position, clean(a.SourceID), s.now())
+		replaced, err := replaceAttachment(tx, id, position, clean(a.SourceID), editTime(m.EditedAt, s.now()))
 		if err != nil {
 			return nil, err
 		}
@@ -491,4 +491,13 @@ func compress(raw []byte) (any, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// editTime is when an edit happened: the source's date for it, if it gave
+// one, else now.
+func editTime(dated, now time.Time) time.Time {
+	if dated.IsZero() {
+		return now
+	}
+	return dated
 }

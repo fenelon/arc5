@@ -4,10 +4,10 @@ A self-hosted archive for your message history. It keeps a durable, searchable
 copy of your chats so you can clean out accounts or use auto-delete without
 losing anything.
 
-**Status:** early development. The archive, the search engine and the web
-interface run: reading chats, searching, managing sources and settings. The
-Telegram connector is not built yet, so the only thing to read is the demo
-archive. The design is in [`docs/superpowers/specs`](docs/superpowers/specs).
+**Status:** early development. The archive, the search engine, the web
+interface and the Telegram connector run. The Telegram connector has been
+tested against a simulated Telegram only; it has not yet been run against a
+real account. The design is in [`docs/superpowers/specs`](docs/superpowers/specs).
 
 ## Run
 
@@ -53,6 +53,38 @@ a reverse proxy that adds TLS, or a VPN. Behind a proxy that sends
 
 The demo source can be signed out and logged in again from the Sources page;
 its login code is 12345.
+
+## Archiving Telegram
+
+arc5 signs in to Telegram as you, the way a desktop app does, and keeps a copy
+of your chats. It never sends, edits or deletes anything.
+
+1. Create API keys of your own at <https://my.telegram.org>, under "API
+   development tools". Any app name will do.
+2. In arc5, open Sources, choose "Add a source", then Telegram. Enter the API
+   ID and hash, your phone number, the code Telegram sends, and your two-step
+   password if you have one.
+3. arc5 then reads your chat list, fetches history (newest chats first) and
+   saves new messages, edits and deletions as they happen. Its Sources panel
+   says how far the catch-up has got.
+
+What is kept: private chats and groups by default; channels and bots when you
+switch them on under "Choose which chats are archived". Edits keep the earlier
+text, and media an edit replaces. A message deleted in Telegram stays, marked
+as deleted. Photos and files up to the attachment limit are downloaded; larger
+ones can be fetched by hand. Chat and people pictures are kept too.
+
+Each Telegram source's settings: how far back to fetch history, how fast, a
+pause switch for the catch-up, and whether to keep self-destructing and
+view-once media. That last one is off by default: the sender expected the
+media to disappear. arc5 downloads it without reporting it as opened, which
+by Telegram's documentation should leave it unopened for the sender. This
+has not yet been confirmed with real accounts.
+
+arc5 appears in Telegram's list of active sessions as "arc5 archive". Ending
+that session from another device, or "Sign this source out" in arc5, stops
+the archiving until you log in again. Telegram cannot show arc5 secret chats,
+and nothing deleted before arc5 first saw it can be recovered.
 
 ## Search languages
 

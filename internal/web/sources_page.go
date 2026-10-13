@@ -21,6 +21,7 @@ const maxFieldRunes = 1000
 type FieldView struct {
 	ID, Name, Label, Help, Kind, Value string
 	Checked                            bool
+	Kept                               bool // a secret is stored, and an empty field keeps it
 	Choices                            []Choice
 }
 
@@ -201,7 +202,7 @@ func (s *Server) panel(src source) (*SourcePanel, error) {
 		v := FieldView{ID: "field-" + f.Name, Name: f.Name, Label: f.Label, Help: f.Help, Kind: string(f.Kind), Value: value}
 		switch f.Kind {
 		case connector.FieldSecret:
-			v.Value = "" // never sent back to the browser
+			v.Value, v.Kept = "", value != "" // never sent back to the browser
 		case connector.FieldBool:
 			v.Checked = value == "true"
 		case connector.FieldChoice:

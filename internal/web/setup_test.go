@@ -248,3 +248,25 @@ func TestLoginsOfTwoSourcesAtOnce(t *testing.T) {
 	close(h.release)
 	wg.Wait()
 }
+
+func TestSecretFieldsSayUnchangedOnlyWhenSomethingIsKept(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	acc := s.fakeAccount("Personal")
+	login := fmt.Sprintf("/sources/%d/login", acc)
+	s.page(login)
+	s.post(login, url.Values{"phone": {"+1 555"}})
+	if body := s.page(login); !strings.Contains(body, `name="password" type="password"`) || strings.Contains(body, "Unchanged") {
+		t.Error("a login step's secret field claims something is kept")
+	}
+	panel := fmt.Sprintf("/sources/%d", acc)
+	if strings.Contains(s.page(panel), "Unchanged") {
+		t.Error("an empty secret setting claims something is kept")
+	}
+	if err := s.store.UpdateAccountSettings(acc, map[string]string{"token": "s3cret"}); err != nil {
+		t.Fatal(err)
+	}
+	if body := s.page(panel); !strings.Contains(body, `placeholder="Unchanged"`) || strings.Contains(body, "s3cret") {
+		t.Error("a kept secret setting is not marked as kept, or is shown")
+	}
+}
