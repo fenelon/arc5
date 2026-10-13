@@ -1,0 +1,15 @@
+Trip report
+
+Day one
+
+We walked twelve kilometres.
+
+Distance   12.0 km
+Ascent       640 m
+  Indented line
+
+Code: x = 1 inline.
+
+Small but shown
+
+End.

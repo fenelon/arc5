@@ -1,0 +1,7 @@
+Fish & chips — £9.50 <tonight> "only" €10 ABC café
+
+Indented words
+
+Zerowidthjoinersandsoftmarks
+
+Unknown &bogus; stays, as does a bare & sign.

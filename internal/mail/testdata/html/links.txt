@@ -1,0 +1,15 @@
+Read the guide (https://example.com/guide) first.
+
+The site is www.example.com and example.org.
+
+Write to Oleg or oleg.vetrov@example.com.
+
+Files on the FTP server (ftp://files.example.com/pub).
+
+Do nothing, back to top, no address, .
+
+[Autumn sale]
+
+Track my parcel
+
+[Sales chart]

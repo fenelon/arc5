@@ -226,7 +226,7 @@ func (w *walker) entity(e *message.Entity, depth int) error {
 	if mediaType == "text/plain" && disposition != "attachment" && name == "" {
 		text := strings.ReplaceAll(string(body), "\r\n", "\n")
 		if !utf8.ValidString(text) {
-			text = strings.ToValidUTF8(text, "�")
+			text = strings.ToValidUTF8(text, "\ufffd")
 		}
 		if strings.EqualFold(params["format"], "flowed") {
 			text = unflow(text, strings.EqualFold(params["delsp"], "yes"))

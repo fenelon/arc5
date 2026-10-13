@@ -233,9 +233,12 @@ Rules:
   `&nbsp;` counts as a space (an invisible zero-width character is
   dropped); `<br>` is a line break, and two or more in a row make one
   blank line.
-- **Tables** used for layout read as text in order: each cell starts on its
-  own line when it holds a block, otherwise cells of a row are joined by a
-  space.
+- **Tables** used for layout read as text in order: each row starts a line,
+  a cell that holds blocks breaks into its lines, and cells of a row that
+  hold only text are joined by a tab, so a receipt's columns stay apart.
+- **Blank paragraphs:** a paragraph or `div` holding only `&nbsp;` is a
+  blank line, as Outlook and Gmail write one; Outlook's `MsoNormal`
+  paragraphs, which have no margins, are lines rather than paragraphs.
 - **Lists:** `ul` items start with "• ", `ol` items with "1. ", "2. " (or
   the `start` value); nested lists are indented two spaces per level.
 - **Headings** are their own paragraph, as text (no `#`).
