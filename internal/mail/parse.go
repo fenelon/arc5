@@ -115,6 +115,15 @@ func messageIDs(v string) []string {
 	return out
 }
 
+// HeaderID reads a Message-ID header's value as Parse does, so a message
+// found by a headers-only fetch has the identity it will be stored under.
+func HeaderID(value string) string {
+	if ids := messageIDs(value); len(ids) > 0 {
+		return ids[0]
+	}
+	return ""
+}
+
 // NormalizeID turns a Message-ID into the form the archive stores: no angle
 // brackets or spaces, and the part after the last @ lower-cased, since domain
 // names are not case-sensitive and some servers rewrite them.
