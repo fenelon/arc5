@@ -1,9 +1,11 @@
 package archive
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/fenelon/arc5/internal/model"
 )
@@ -45,4 +47,103 @@ func (s *Store) ChatArchived(accountID int64, chatSourceID string) (bool, error)
 		return false, nil
 	}
 	return archived != 0, err
+}
+
+// ChatEntry is one chat of an account, as the owner sees it when choosing
+// which chats are archived.
+type ChatEntry struct {
+	ID       int64
+	SourceID string
+	Kind     model.ChatKind
+	Title    string
+	Archived bool
+	Messages int
+	LastAt   time.Time // zero when nothing from it is archived
+}
+
+// AccountChats lists every chat of an account, archived or not: the most
+// recently active first, then the ones with nothing archived, by title.
+func (s *Store) AccountChats(accountID int64) ([]ChatEntry, error) {
+	rows, err := s.r.Query(`
+		SELECT c.id, c.source_id, c.kind, c.title, c.archived,
+		       (SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.id),
+		       (SELECT MAX(m.sent_at) FROM messages m WHERE m.chat_id = c.id) AS last
+		FROM chats c WHERE c.account_id = ?
+		ORDER BY last IS NULL, last DESC, c.title, c.id`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ChatEntry
+	for rows.Next() {
+		var (
+			c        ChatEntry
+			kind     string
+			archived int
+			last     sql.NullInt64
+		)
+		if err := rows.Scan(&c.ID, &c.SourceID, &kind, &c.Title, &archived, &c.Messages, &last); err != nil {
+			return nil, err
+		}
+		c.Kind, c.Archived, c.LastAt = model.ChatKind(kind), archived != 0, fromUnix(last)
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// SetChatsArchived switches archiving on or off for chats of one account, by
+// chat ID. IDs of other accounts' chats are ignored.
+func (s *Store) SetChatsArchived(accountID int64, archived map[int64]bool) error {
+	return s.inTx(context.Background(), func(tx *sql.Tx) error {
+		for id, on := range archived {
+			if _, err := tx.Exec(`UPDATE chats SET archived = ? WHERE id = ? AND account_id = ?`, b2i(on), id, accountID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// LastMessageTimes returns, per account, when its newest archived message
+// was sent. Accounts with no messages are left out.
+func (s *Store) LastMessageTimes() (map[int64]time.Time, error) {
+	rows, err := s.r.Query(`
+		SELECT account_id, MAX(last) FROM (
+			SELECT c.account_id, (SELECT MAX(m.sent_at) FROM messages m WHERE m.chat_id = c.id) AS last
+			FROM chats c)
+		WHERE last IS NOT NULL GROUP BY account_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]time.Time{}
+	for rows.Next() {
+		var (
+			id   int64
+			last int64
+		)
+		if err := rows.Scan(&id, &last); err != nil {
+			return nil, err
+		}
+		out[id] = time.Unix(last, 0).UTC()
+	}
+	return out, rows.Err()
+}
+
+// SenderInfo is one person who wrote in an account's chats.
+type SenderInfo struct {
+	ID          int64
+	AccountID   int64
+	DisplayName string
+	Username    string
+}
+
+func (s *Store) Sender(id int64) (SenderInfo, error) {
+	var sn SenderInfo
+	err := s.r.QueryRow(`SELECT id, account_id, display_name, username FROM senders WHERE id = ?`, id).
+		Scan(&sn.ID, &sn.AccountID, &sn.DisplayName, &sn.Username)
+	if errors.Is(err, sql.ErrNoRows) {
+		return SenderInfo{}, fmt.Errorf("sender %d: %w", id, ErrNotFound)
+	}
+	return sn, err
 }

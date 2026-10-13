@@ -1,11 +1,14 @@
 package archive
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
 )
 
 // Account is one configured instance of a connector.
@@ -16,9 +19,10 @@ type Account struct {
 	Settings  map[string]string
 	Enabled   bool
 	CreatedAt time.Time
+	RemovedAt time.Time // zero unless the owner removed the source
 }
 
-const accountColumns = `id, connector, label, settings, enabled, created_at`
+const accountColumns = `id, connector, label, settings, enabled, created_at, removed_at`
 
 func encodeSettings(settings map[string]string) (string, error) {
 	if settings == nil {
@@ -34,8 +38,9 @@ func scanAccount(row interface{ Scan(dest ...any) error }) (Account, error) {
 		settings string
 		enabled  int
 		created  int64
+		removed  sql.NullInt64
 	)
-	if err := row.Scan(&a.ID, &a.Connector, &a.Label, &settings, &enabled, &created); err != nil {
+	if err := row.Scan(&a.ID, &a.Connector, &a.Label, &settings, &enabled, &created, &removed); err != nil {
 		return Account{}, err
 	}
 	a.Settings = map[string]string{}
@@ -44,6 +49,7 @@ func scanAccount(row interface{ Scan(dest ...any) error }) (Account, error) {
 	}
 	a.Enabled = enabled != 0
 	a.CreatedAt = time.Unix(created, 0).UTC()
+	a.RemovedAt = fromUnix(removed)
 	return a, nil
 }
 
@@ -96,8 +102,65 @@ func (s *Store) UpdateAccountSettings(id int64, settings map[string]string) erro
 	return s.updateAccount(id, `UPDATE accounts SET settings = ? WHERE id = ?`, body, id)
 }
 
+// SetAccountEnabled switches an account on or off. A removed account stays off.
 func (s *Store) SetAccountEnabled(id int64, enabled bool) error {
+	if enabled {
+		acc, err := s.Account(id)
+		if err != nil {
+			return err
+		}
+		if !acc.RemovedAt.IsZero() {
+			return fmt.Errorf("%w: account %d was removed", ErrInvalid, id)
+		}
+	}
 	return s.updateAccount(id, `UPDATE accounts SET enabled = ? WHERE id = ?`, b2i(enabled), id)
+}
+
+// maxLabelRunes keeps a source's name to what fits on its tile and more.
+const maxLabelRunes = 100
+
+// label tidies a name the owner typed: no control characters, single spaces,
+// no more than maxLabelRunes characters.
+func label(name string) string {
+	name = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, clean(name))
+	name = strings.Join(strings.Fields(name), " ")
+	if r := []rune(name); len(r) > maxLabelRunes {
+		name = string(r[:maxLabelRunes])
+	}
+	return name
+}
+
+// RenameAccount changes the name the owner gave a source.
+func (s *Store) RenameAccount(id int64, name string) error {
+	name = label(name)
+	if name == "" {
+		return fmt.Errorf("%w: a source needs a name", ErrInvalid)
+	}
+	return s.updateAccount(id, `UPDATE accounts SET label = ? WHERE id = ?`, name, id)
+}
+
+// RemoveAccount switches a source off for good and forgets its connector's
+// state, which holds the session that grants access to the account. Its
+// chats and messages stay in the archive.
+func (s *Store) RemoveAccount(id int64) error {
+	return s.inTx(context.Background(), func(tx *sql.Tx) error {
+		res, err := tx.Exec(`UPDATE accounts SET enabled = 0, removed_at = COALESCE(removed_at, ?) WHERE id = ?`, s.now().Unix(), id)
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n == 0 {
+			return fmt.Errorf("account %d: %w", id, ErrNotFound)
+		}
+		_, err = tx.Exec(`DELETE FROM connector_state WHERE account_id = ?`, id)
+		return err
+	})
 }
 
 func (s *Store) updateAccount(id int64, query string, args ...any) error {
