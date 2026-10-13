@@ -270,6 +270,13 @@ mark.hit{padding:0 2px;color:var(--hit-ink);background:var(--hit);border-radius:
 .confirm__body{display:flex;flex-direction:column;gap:10px;margin-top:10px;max-width:520px}
 .button--warn{color:var(--warn-bg);background:var(--warn-ink)}
 
+.toggles{margin:10px 0 0;padding:0;list-style:none}
+.toggles li{border-top:1px solid var(--line-soft)}
+.toggle{display:flex;width:100%;padding:8px 0}
+.toggle__text{display:flex;flex-direction:column;min-width:0}
+.toggle__title{overflow-wrap:anywhere}
+.toggle__detail{font-size:13px;font-weight:350;color:var(--muted)}
+
 /* Settings. */
 .settings-link{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 4px;font-weight:450;color:var(--ink);text-decoration:none}
 .settings-link svg{width:20px;height:20px}

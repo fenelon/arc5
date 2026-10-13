@@ -117,6 +117,8 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /sources/{id}/settings", s.signedIn(s.saveSourceSettings))
 	s.mux.Handle("POST /sources/{id}/signout", s.signedIn(s.signOutSource))
 	s.mux.Handle("POST /sources/{id}/remove", s.signedIn(s.removeSource))
+	s.mux.Handle("GET /sources/{id}/chats", s.signedIn(s.archivedChats))
+	s.mux.Handle("POST /sources/{id}/chats", s.signedIn(s.saveArchivedChats))
 	s.mux.Handle("GET /settings", s.signedIn(s.settings))
 	s.mux.Handle("POST /settings/appearance", s.signedIn(s.saveAppearance))
 	s.mux.Handle("POST /settings/languages", s.signedIn(s.saveLanguages))
