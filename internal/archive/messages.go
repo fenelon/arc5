@@ -19,8 +19,10 @@ const reasonOverCap = "over size cap"
 // attachments of that message still waiting to be downloaded.
 //
 // It is idempotent, and replaying an older copy never reverts a later edit:
-// see staleText. Attachments are recorded when their position is first seen
-// and are not changed by edits.
+// see staleText. Attachments are recorded when their position is first seen.
+// An edit changes one only when both the stored and the incoming attachment
+// carry a source identity and they differ: the stored one is then kept as
+// replaced and the new one takes its position (see replaceAttachment).
 func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.AttachmentRef, error) {
 	if m.SourceID == "" {
 		return nil, fmt.Errorf("%w: message needs a source ID", ErrInvalid)
@@ -136,11 +138,16 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 		case a.Size > limit:
 			status, reason = model.StatusSkipped, reasonOverCap
 		}
+		replaced, err := replaceAttachment(tx, id, position, clean(a.SourceID), s.now())
+		if err != nil {
+			return nil, err
+		}
+		changed = changed || replaced
 		res, err := tx.Exec(`
-			INSERT INTO attachments (message_id, position, kind, file_name, mime_type, size, status, reason, ephemeral)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO attachments (message_id, position, kind, file_name, mime_type, size, status, reason, ephemeral, source_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT (message_id, position) DO NOTHING`,
-			id, position, string(a.Kind), clean(a.FileName), clean(a.MimeType), a.Size, string(status), clean(reason), b2i(a.Ephemeral))
+			id, position, string(a.Kind), clean(a.FileName), clean(a.MimeType), a.Size, string(status), clean(reason), b2i(a.Ephemeral), clean(a.SourceID))
 		if err != nil {
 			return nil, err
 		}
@@ -183,6 +190,42 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 		return nil, err
 	}
 	return pending, tx.Commit()
+}
+
+// reasonReplaced explains a replaced attachment that was never downloaded.
+const reasonReplaced = "replaced by an edit before it was downloaded"
+
+// replaceAttachment makes room at a position for an attachment with a new
+// source identity. The stored attachment moves to position minus its ID with
+// replaced_at set; if it was never stored, it becomes unavailable, as nothing
+// can fetch it by position any more. A stored attachment without an identity
+// takes the incoming one instead. It reports whether it changed anything.
+func replaceAttachment(tx *sql.Tx, messageID int64, position int, sourceID string, now time.Time) (bool, error) {
+	if sourceID == "" {
+		return false, nil
+	}
+	var (
+		attID  int64
+		stored string
+	)
+	err := tx.QueryRow(`SELECT id, source_id FROM attachments WHERE message_id = ? AND position = ?`, messageID, position).Scan(&attID, &stored)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, err
+	case stored == sourceID:
+		return false, nil
+	case stored == "":
+		_, err := tx.Exec(`UPDATE attachments SET source_id = ? WHERE id = ?`, sourceID, attID)
+		return false, err
+	}
+	_, err = tx.Exec(`
+		UPDATE attachments SET position = -id, replaced_at = ?, requested = 0,
+		       reason = CASE WHEN status = 'stored' THEN reason ELSE ? END,
+		       status = CASE WHEN status = 'stored' THEN status ELSE 'unavailable' END
+		WHERE id = ?`, now.Unix(), reasonReplaced, attID)
+	return err == nil, err
 }
 
 // staleText reports whether incoming text that differs from the stored text is
@@ -347,6 +390,7 @@ func (s *Store) Versions(messageID int64) ([]Version, error) {
 
 type StoredAttachment struct {
 	ID        int64
+	Replaced  time.Time // when an edit replaced it; zero for current attachments
 	Position  int
 	Kind      model.AttachmentKind
 	FileName  string
@@ -359,29 +403,51 @@ type StoredAttachment struct {
 	Requested bool
 }
 
+// Attachments returns a message's current attachments in order.
 func (s *Store) Attachments(messageID int64) ([]StoredAttachment, error) {
-	rows, err := s.r.Query(`
-		SELECT id, position, kind, file_name, mime_type, size, sha256, status, reason, ephemeral, requested
-		FROM attachments WHERE message_id = ? ORDER BY position`, messageID)
+	return s.attachmentsWhere(`message_id = ? AND position >= 0 ORDER BY position`, messageID)
+}
+
+// ReplacedAttachments returns the attachments edits replaced, oldest first.
+func (s *Store) ReplacedAttachments(messageID int64) ([]StoredAttachment, error) {
+	return s.attachmentsWhere(`message_id = ? AND position < 0 ORDER BY replaced_at, id`, messageID)
+}
+
+const attachmentColumns = `id, position, kind, file_name, mime_type, size, sha256, status, reason, ephemeral, requested, replaced_at`
+
+func (s *Store) attachmentsWhere(where string, args ...any) ([]StoredAttachment, error) {
+	rows, err := s.r.Query(`SELECT `+attachmentColumns+` FROM attachments WHERE `+where, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []StoredAttachment
 	for rows.Next() {
-		var (
-			a                    StoredAttachment
-			kind, status         string
-			ephemeral, requested int
-		)
-		if err := rows.Scan(&a.ID, &a.Position, &kind, &a.FileName, &a.MimeType, &a.Size, &a.SHA256, &status, &a.Reason, &ephemeral, &requested); err != nil {
+		a, err := scanAttachment(rows)
+		if err != nil {
 			return nil, err
 		}
-		a.Kind, a.Status = model.AttachmentKind(kind), model.AttachmentStatus(status)
-		a.Ephemeral, a.Requested = ephemeral != 0, requested != 0
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+// scanAttachment reads attachmentColumns, after any columns in front given
+// in extra.
+func scanAttachment(row interface{ Scan(...any) error }, extra ...any) (StoredAttachment, error) {
+	var (
+		a                    StoredAttachment
+		kind, status         string
+		ephemeral, requested int
+		replaced             sql.NullInt64
+	)
+	dest := append(extra, &a.ID, &a.Position, &kind, &a.FileName, &a.MimeType, &a.Size, &a.SHA256, &status, &a.Reason, &ephemeral, &requested, &replaced)
+	if err := row.Scan(dest...); err != nil {
+		return StoredAttachment{}, err
+	}
+	a.Kind, a.Status = model.AttachmentKind(kind), model.AttachmentStatus(status)
+	a.Ephemeral, a.Requested, a.Replaced = ephemeral != 0, requested != 0, fromUnix(replaced)
+	return a, nil
 }
 
 // Raw returns the source's original payload for a message, or nil if none was stored.
