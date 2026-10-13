@@ -80,13 +80,13 @@ func TestHTMLTextCharsets(t *testing.T) {
 
 func TestHTMLTextEdgeCases(t *testing.T) {
 	for in, want := range map[string]string{
-		"":                                      "",
-		"plain words, no tags":                  "plain words, no tags",
-		"<p>unclosed <b>bold<p>next":            "unclosed bold\n\nnext",
-		"<table><tr><td>a<td>b</table>":         "a\tb",
+		"":                              "",
+		"plain words, no tags":          "plain words, no tags",
+		"<p>unclosed <b>bold<p>next":    "unclosed bold\n\nnext",
+		"<table><tr><td>a<td>b</table>": "a\tb",
 		"<blockquote><blockquote>deep</blockquote></blockquote>": "> > deep",
-		"<ul><li></li><li>only</li></ul>":       "• only",
-		"<p>a</p><!-- comment --><p>b</p>":      "a\n\nb",
+		"<ul><li></li><li>only</li></ul>":                        "• only",
+		"<p>a</p><!-- comment --><p>b</p>":                       "a\n\nb",
 	} {
 		if got := HTMLText([]byte(in), "utf-8"); got != want {
 			t.Errorf("%q: %q, want %q", in, got, want)
