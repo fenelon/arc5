@@ -151,3 +151,28 @@ func TestCheckpointsAndCredentials(t *testing.T) {
 		t.Error("damaged credentials were read")
 	}
 }
+
+func stateAt(pts int) updates.State { return updates.State{Pts: pts, Qts: 1, Date: 1, Seq: 1} }
+
+func TestUpdateStorageCanBeHeld(t *testing.T) {
+	ctx := context.Background()
+	st := newUpdateStorage(newMemState())
+	if err := st.SetState(ctx, 1, stateAt(5)); err != nil {
+		t.Fatal(err)
+	}
+	held := errors.New("disk full")
+	st.hold(held)
+	for name, set := range map[string]func() error{
+		"state":        func() error { return st.SetState(ctx, 1, stateAt(9)) },
+		"pts":          func() error { return st.SetPts(ctx, 1, 9) },
+		"channel pts":  func() error { return st.SetChannelPts(ctx, 1, 3, 9) },
+		"date and seq": func() error { return st.SetDateSeq(ctx, 1, 9, 9) },
+	} {
+		if err := set(); !errors.Is(err, held) {
+			t.Errorf("%s while held: %v", name, err)
+		}
+	}
+	if got, _, _ := st.GetState(ctx, 1); got.Pts != 5 {
+		t.Errorf("pts = %d", got.Pts)
+	}
+}

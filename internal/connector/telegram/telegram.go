@@ -112,6 +112,11 @@ type run struct {
 	order   []string                // chats by recent activity, newest first
 	senders map[string]model.Sender // senders stored by this run, as stored
 	paced   bool                    // a history request has been made
+	known   map[string]model.Chat   // chats stored by this run, as stored
+
+	ctx      context.Context         // the run's
+	abort    context.CancelCauseFunc // stops the run with a reason
+	catchUps chan string             // chats to bring up to date after a long disconnection
 }
 
 // Run archives the account until ctx ends: it brings the chat list up to
@@ -128,8 +133,11 @@ func (c *Connector) Run(ctx context.Context, sink connector.Sink, state connecto
 		return connector.ErrNeedsLogin
 	}
 	sink.ReportProgress(connector.Progress{Phase: connector.PhaseConnecting})
-	r := &run{c: c, sink: sink, state: state, opts: readOptions(settings, c.now), hashes: newUpdateStorage(state), e: newEntities(nil, nil)}
-	r.conn, err = c.dial(ctx, creds, state, listener{handler: r, tooLong: r.tooLong, channelTooLong: r.channelTooLong})
+	ctx, abort := context.WithCancelCause(ctx)
+	defer abort(nil)
+	r := &run{c: c, sink: sink, state: state, opts: readOptions(settings, c.now), hashes: newUpdateStorage(state),
+		e: newEntities(nil, nil), ctx: ctx, abort: abort, catchUps: make(chan string, catchUpQueue)}
+	r.conn, err = c.dial(ctx, creds, state, listener{handler: r, storage: r.hashes, tooLong: r.tooLong, channelTooLong: r.channelTooLong})
 	if err != nil {
 		return r.fail(err)
 	}
@@ -146,10 +154,15 @@ func (c *Connector) Run(ctx context.Context, sink connector.Sink, state connecto
 	if err := r.syncChats(ctx); err != nil {
 		return r.fail(err)
 	}
-	return r.fail(together(ctx,
+	err = together(ctx,
 		func(ctx context.Context) error { return r.conn.Listen(ctx, r.selfID) },
 		r.backfill,
-	))
+		r.catchUpWorker,
+	)
+	if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) {
+		err = cause // a live update could not be stored
+	}
+	return r.fail(err)
 }
 
 // fail says what an error means for the runner: a dead session needs a login.

@@ -52,6 +52,7 @@ type conn interface {
 // what was missed while disconnected.
 type listener struct {
 	handler        telegram.UpdateHandler // nil for a connection that only logs in
+	storage        *updateStorage         // where the update position is kept
 	tooLong        func()
 	channelTooLong func(channelID int64)
 }
@@ -312,7 +313,10 @@ func dialTelegram(ctx context.Context, creds credentials, state connector.State,
 	}
 	var gaps *updates.Manager
 	if l.handler != nil {
-		st := newUpdateStorage(state)
+		st := l.storage
+		if st == nil {
+			st = newUpdateStorage(state)
+		}
 		gaps = updates.New(updates.Config{
 			Handler: l.handler, Storage: st, AccessHasher: st, UserAccessHasher: st,
 			OnTooLong: l.tooLong, OnChannelTooLong: l.channelTooLong,

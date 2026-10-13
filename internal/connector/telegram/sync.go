@@ -58,7 +58,7 @@ func (r *run) syncChats(ctx context.Context) error {
 			if !ok || seen[chat.SourceID] {
 				continue
 			}
-			if err := r.sink.UpsertChat(chat); err != nil {
+			if err := r.ensureChat(chat); err != nil {
 				return err
 			}
 			seen[chat.SourceID] = true

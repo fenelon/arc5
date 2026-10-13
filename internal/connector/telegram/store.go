@@ -120,6 +120,19 @@ func saveJSON(state connector.State, key string, v any) error {
 type updateStorage struct {
 	state connector.State
 	mu    sync.Mutex // read-modify-write of the state and the channel map
+	held  error      // set when an update could not be stored
+}
+
+// hold makes every later change of the update position fail with err. gotd
+// saves the new position even when the handler failed to store an update,
+// so after a storage failure the position must stay where it is: the next
+// run asks Telegram for everything since then again.
+func (s *updateStorage) hold(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.held == nil {
+		s.held = err
+	}
 }
 
 func newUpdateStorage(state connector.State) *updateStorage { return &updateStorage{state: state} }
@@ -137,6 +150,9 @@ func (s *updateStorage) GetState(_ context.Context, _ int64) (updates.State, boo
 func (s *updateStorage) SetState(_ context.Context, _ int64, st updates.State) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.held != nil {
+		return s.held
+	}
 	return saveJSON(s.state, keyUpdates, st)
 }
 
@@ -144,6 +160,9 @@ func (s *updateStorage) SetState(_ context.Context, _ int64, st updates.State) e
 func (s *updateStorage) change(f func(*updates.State)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.held != nil {
+		return s.held
+	}
 	var st updates.State
 	found, err := loadJSON(s.state, keyUpdates, &st)
 	if err != nil {
@@ -194,6 +213,9 @@ func (s *updateStorage) GetChannelPts(_ context.Context, _, channelID int64) (in
 func (s *updateStorage) SetChannelPts(_ context.Context, _, channelID int64, p int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.held != nil {
+		return s.held
+	}
 	pts, err := s.channels()
 	if err != nil {
 		return err
