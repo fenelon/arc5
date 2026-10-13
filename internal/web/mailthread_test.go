@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/fenelon/arc5/internal/model"
 	"net/http"
@@ -16,7 +17,7 @@ func TestThreadView(t *testing.T) {
 	planning := m.thread("Monday planning, room 4")
 	body := m.page(fmt.Sprintf("/s/%d/c/%d", m.box, planning))
 	has(t, body,
-		fmt.Sprintf(`<a class="thread__back" href="/s/%d?folder=inbox">Back to Inbox</a>`, m.box),
+		fmt.Sprintf(`<a class="back-link" href="/s/%d?folder=inbox"><svg`, m.box), `</svg>Back to Inbox</a>`,
 		`<h1 class="thread__title">Monday planning, room 4</h1>`,
 		"5 messages, 25 to 27 September 2026. The three earliest are folded; select one to open it.",
 		// Folded: one line with the start of the text.
@@ -39,7 +40,7 @@ func TestThreadView(t *testing.T) {
 	}
 	// From another folder, the way back leads there.
 	sent := m.page(fmt.Sprintf("/s/%d/c/%d?folder=sent", m.box, planning))
-	has(t, sent, fmt.Sprintf(`<a class="thread__back" href="/s/%d?folder=sent">Back to Sent</a>`, m.box))
+	has(t, sent, fmt.Sprintf(`<a class="back-link" href="/s/%d?folder=sent"><svg`, m.box), `</svg>Back to Sent</a>`)
 
 	// A conversation of another source, or a chat, is not found here.
 	other := m.account("Personal 2", "telegram")
@@ -90,7 +91,7 @@ func TestThreadOpenedFromSearch(t *testing.T) {
 	m.store.Reader().QueryRow(`SELECT MIN(id) FROM messages WHERE chat_id = ?`, planning).Scan(&first)
 	body := m.page(fmt.Sprintf("/s/%d/c/%d?at=%d&q=audit", m.box, planning, first))
 	has(t, body, fmt.Sprintf(`id="m%d" open>`, first), "mcard--target", `<mark class="hit">audit</mark>`,
-		`value="audit"`, fmt.Sprintf(`<a class="thread__back" href="/s/%d?q=audit">Back to results</a>`, m.box))
+		`value="audit"`, fmt.Sprintf(`<a class="back-link" href="/s/%d?q=audit"><svg`, m.box), `</svg>Back to results</a>`)
 	if n := strings.Count(body, " open>"); n != 3 {
 		t.Errorf("%d cards open, want the target and the last two", n)
 	}
@@ -128,5 +129,25 @@ func TestOriginalDownload(t *testing.T) {
 	m.srv.ServeHTTP(anon, httptest.NewRequest("GET", fmt.Sprintf("/original/%d", id), nil))
 	if anon.Code == http.StatusOK {
 		t.Error("the original is served without a session")
+	}
+}
+
+// Links in mail text are shown short and can be followed; nothing else in
+// the text becomes markup.
+func TestMailTextLinks(t *testing.T) {
+	long := "https://c.gle/AAuDWvlVmVSUgPq6YFsEIUvln08VZuotNwm1-S8rYiNyauzCvzObBK2hG2kPZ9OqdboAeBEaM2f2XTirYFNcmdJIWOXdXfDTquhGttINfpzC"
+	got := linkParts("View report snapshot <" + long + ">. Or www.example.com, or https://example.com/a).")
+	want := []TextPart{
+		{Text: "View report snapshot "},
+		{Href: long, Label: "c.gle/AAuDWvlVmVSUgPq6YFsEIUvln08VZuo…"},
+		{Text: ". Or www.example.com, or "},
+		{Href: "https://example.com/a", Label: "example.com/a"},
+		{Text: ")."},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("parts =\n%+v\nwant\n%+v", got, want)
+	}
+	if got := linkParts("javascript:alert(1) and <script>"); len(got) != 1 || got[0].Href != "" {
+		t.Errorf("not a link: %+v", got)
 	}
 }

@@ -35,7 +35,7 @@ func TestChooseArchivedChats(t *testing.T) {
 	path := fmt.Sprintf("/sources/%d/chats", acc)
 
 	body := s.page(path)
-	has(t, body, "<h1>Chats of Personal</h1>", fmt.Sprintf(`href="/sources/%d">Back to Personal`, acc),
+	has(t, body, "<h1>Chats of Personal</h1>", fmt.Sprintf(`<a class="back-link" href="/sources/%d"><svg`, acc), `</svg>Back to Personal</a>`,
 		"Private chats", "Groups", "Channels",
 		fmt.Sprintf(`name="archived" value="%d" checked`, id["Dan"]),
 		fmt.Sprintf(`name="archived" value="%d" checked`, id["g1"]),
