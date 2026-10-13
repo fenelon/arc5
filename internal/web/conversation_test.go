@@ -235,19 +235,31 @@ func TestYearRail(t *testing.T) {
 	path := fmt.Sprintf("/s/%d/c/%d", acc, s.chatID(acc, "Long"))
 
 	body := s.page(path)
-	has(t, body, `<nav class="rail" aria-label="Jump to a quarter" data-controller="rail">`,
+	has(t, body, `<nav class="rail" aria-label="Jump to a month or a week" data-controller="rail">`,
 		`<span class="rail__label">2026</span>`, `<span class="rail__label">2025</span>`, `<span class="rail__label">2024</span>`,
-		fmt.Sprintf(`href="%s?date=2026-07-01"`, path), fmt.Sprintf(`href="%s?date=2024-01-01"`, path),
-		`aria-label="July to September 2026, 8 messages"`, `class="band band--4 band--now"`,
-		`aria-label="April to June 2025, 4 messages"`, `class="band band--2"`,
-		`aria-label="January to March 2024, 1 message"`, `class="band band--1"`,
+		fmt.Sprintf(`<a class="month month--now" href="%s?date=2026-08-01" aria-label="August 2026, 8 messages" title="August 2026, 8 messages"><span class="month__name">Aug</span><span class="band band--4"></span></a>`, path),
+		fmt.Sprintf(`href="%s?date=2025-05-01" aria-label="May 2025, 4 messages"`, path), `<span class="month__name">May</span><span class="band band--2"></span>`,
+		fmt.Sprintf(`href="%s?date=2024-02-01" aria-label="February 2024, 1 message"`, path), `<span class="month__name">Feb</span><span class="band band--1"></span>`,
+		`aria-label="March 2024, no messages"`,
 		`<option value="2026-01-01" selected>2026</option>`, `<option value="2024-01-01">2024</option>`)
-	if got := strings.Count(body, `class="band`); got != 12 {
-		t.Errorf("%d bands, want four for each of three years", got)
+	// From the first message's month to the last's: February to December
+	// 2024, all of 2025, January to August 2026.
+	if got := strings.Count(body, `<a class="month`); got != 11+12+8 {
+		t.Errorf("%d months, want 31", got)
+	}
+	lacks(t, body, `aria-label="January 2024`, `aria-label="September 2026`)
+	// The month being read opens into its weeks, from Mondays: August 2026
+	// begins on a Saturday.
+	has(t, body, `<div class="weeks">`,
+		fmt.Sprintf(`<a class="week week--now" href="%s?date=2026-08-10" aria-label="Week from 10 August 2026, 8 messages" title="Week from 10 August 2026, 8 messages"><span class="week__day">10</span><span class="band band--4"></span></a>`, path),
+		fmt.Sprintf(`href="%s?date=2026-08-01" aria-label="Week from 1 August 2026, no messages"`, path),
+		fmt.Sprintf(`href="%s?date=2026-08-31" aria-label="Week from 31 August 2026, no messages"`, path))
+	if got := strings.Count(body, `<a class="week`); got != 6 {
+		t.Errorf("%d weeks in August 2026, want 6", got)
 	}
 
-	old := s.page(path + "?date=2024-01-01")
-	has(t, old, `aria-label="January to March 2024, 1 message"`)
+	old := s.page(path + "?date=2024-02-01")
+	has(t, old, `<a class="month month--now" href="`+path+`?date=2024-02-01"`, "Week from 5 February 2024, 1 message")
 	if !strings.Contains(old, `<div class="rail__year rail__year--now"><span class="rail__label">2024</span>`) {
 		t.Error("the rail does not mark 2024 as the year being read")
 	}
@@ -304,7 +316,7 @@ func TestRailFollowsTheTimeZone(t *testing.T) {
 	s.say(acc, "Dan Whitfield", "2", "much later", time.Date(2026, time.September, 1, 12, 0, 0, 0, la))
 	path := fmt.Sprintf("/s/%d/c/%d", acc, s.chatID(acc, "Dan Whitfield"))
 
-	has(t, s.page(path), fmt.Sprintf(`href="%s?date=2025-10-01" aria-label="October to December 2025, 1 message"`, path))
+	has(t, s.page(path), fmt.Sprintf(`href="%s?date=2025-12-01" aria-label="December 2025, 1 message"`, path))
 	has(t, s.page(path+"?date=2025-10-01"), "happy new year")
 }
 
@@ -352,10 +364,10 @@ func TestRailRunsOldestToNewest(t *testing.T) {
 	if in(`rail__label">2024<`) > in(`rail__label">2025<`) || in(`rail__label">2025<`) > in(`rail__label">2026<`) {
 		t.Error("the rail's years do not run oldest first")
 	}
-	if in(`"January to March 2026`) > in(`"July to September 2026`) {
-		t.Error("a year's quarters do not run oldest first")
+	if in(`"January 2026`) > in(`"July 2026`) {
+		t.Error("a year's months do not run oldest first")
 	}
-	has(t, body, `<nav class="rail" aria-label="Jump to a quarter" data-controller="rail">`)
+	has(t, body, `<nav class="rail" aria-label="Jump to a month or a week" data-controller="rail">`)
 }
 
 // Scrolling toward either end loads the next page in place: the page's

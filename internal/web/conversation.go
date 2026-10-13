@@ -105,16 +105,23 @@ type Attachment struct {
 
 // RailYear is one block of the year rail.
 type RailYear struct {
-	Label string
-	Now   bool
-	Bands []RailBand // newest quarter first
+	Label  string
+	Now    bool
+	Months []RailMonth // oldest first
+}
+
+// RailMonth is a month on the rail; the month being read carries its weeks.
+type RailMonth struct {
+	Href, Name, Label string
+	Level             int // 0 for no messages, up to 4 for the busiest month
+	Now               bool
+	Weeks             []RailBand
 }
 
 type RailBand struct {
-	Href  string
-	Label string
-	Level int // 0 for no messages, up to 4 for the busiest quarter
-	Now   bool
+	Href, Day, Label string
+	Level            int // 0 for no messages, up to 4 for the busiest week of the month
+	Now              bool
 }
 
 type YearOption struct {
@@ -199,35 +206,90 @@ func plural(n int, one, many string) string {
 	return fmt.Sprintf("%d %s", n, many)
 }
 
-// rail builds the year rail from a chat's quarters, counted in the zone of
-// now. now is the moment the page is reading, which marks one band and one year.
-func rail(path, keep string, quarters []archive.Quarter, now time.Time) ([]RailYear, []YearOption) {
-	if len(quarters) == 0 {
+// messages says how many messages there are, "no messages" for none.
+func messages(n int) string {
+	if n == 0 {
+		return "no messages"
+	}
+	return plural(n, "message", "messages")
+}
+
+// level grades n against the busiest: 0 for none, then 1 to 4.
+func level(n, busiest int) int {
+	if n == 0 || busiest == 0 {
+		return 0
+	}
+	return max(1, (n*4+busiest-1)/busiest)
+}
+
+// weekBounds are the weeks of the month that begins at first: from the 1st,
+// then from each Monday, ending with the next month's 1st.
+func weekBounds(first time.Time) []time.Time {
+	next := first.AddDate(0, 1, 0)
+	out := []time.Time{first}
+	for d := first.AddDate(0, 0, 1); d.Before(next); d = d.AddDate(0, 0, 1) {
+		if d.Weekday() == time.Monday {
+			out = append(out, d)
+		}
+	}
+	return append(out, next)
+}
+
+// rail builds the year rail from a chat's months, counted in the zone of
+// now, from the first message's month to the last's. now is the moment the
+// page is reading: its month and year are marked, and its month opens into
+// its weeks, from weeks (bounds as weekBounds gives) and their counts.
+func rail(path, keep string, months []archive.Month, now time.Time, weeks []time.Time, weekCounts []int) ([]RailYear, []YearOption) {
+	if len(months) == 0 {
 		return nil, nil
 	}
 	count := map[[2]int]int{}
-	busiest, newest, oldest := 0, quarters[0].Year, quarters[0].Year
-	for _, q := range quarters {
-		count[[2]int{q.Year, q.Quarter}] = q.Messages
-		busiest = max(busiest, q.Messages)
-		newest, oldest = max(newest, q.Year), min(oldest, q.Year)
+	busiest := 0
+	first, last := months[0], months[0]
+	for _, m := range months {
+		count[[2]int{m.Year, int(m.Month)}] = m.Messages
+		busiest = max(busiest, m.Messages)
+		if m.Year < first.Year || m.Year == first.Year && m.Month < first.Month {
+			first = m
+		}
+		if m.Year > last.Year || m.Year == last.Year && m.Month > last.Month {
+			last = m
+		}
 	}
-	nowYear, nowQuarter := now.Year(), (int(now.Month())+2)/3
+	busiestWeek := 0
+	for _, n := range weekCounts {
+		busiestWeek = max(busiestWeek, n)
+	}
 	var years []RailYear
 	var options []YearOption
-	for year := oldest; year <= newest; year++ {
-		y := RailYear{Label: strconv.Itoa(year), Now: year == nowYear}
-		for quarter := 1; quarter <= 4; quarter++ {
-			n := count[[2]int{year, quarter}]
-			level := 0
-			if n > 0 {
-				level = max(1, (n*4+busiest-1)/busiest)
+	for year := first.Year; year <= last.Year; year++ {
+		y := RailYear{Label: strconv.Itoa(year), Now: year == now.Year()}
+		from, to := time.January, time.December
+		if year == first.Year {
+			from = first.Month
+		}
+		if year == last.Year {
+			to = last.Month
+		}
+		for month := from; month <= to; month++ {
+			n := count[[2]int{year, int(month)}]
+			start := time.Date(year, month, 1, 0, 0, 0, 0, now.Location())
+			label := fmt.Sprintf("%s %d, %s", month, year, messages(n))
+			m := RailMonth{
+				Href: fmt.Sprintf("%s?date=%s%s", path, start.Format(time.DateOnly), keep), Name: start.Format("Jan"),
+				Label: label, Level: level(n, busiest), Now: y.Now && month == now.Month(),
 			}
-			y.Bands = append(y.Bands, RailBand{
-				Href:  fmt.Sprintf("%s?date=%d-%02d-01%s", path, year, quarter*3-2, keep),
-				Label: fmt.Sprintf("%s %d, %s", quarterNames[quarter-1], year, plural(n, "message", "messages")),
-				Level: level, Now: year == nowYear && quarter == nowQuarter,
-			})
+			if m.Now && len(weeks) == len(weekCounts)+1 {
+				for i, n := range weekCounts {
+					from := weeks[i]
+					m.Weeks = append(m.Weeks, RailBand{
+						Href: fmt.Sprintf("%s?date=%s%s", path, from.Format(time.DateOnly), keep), Day: strconv.Itoa(from.Day()),
+						Label: fmt.Sprintf("Week from %d %s %d, %s", from.Day(), from.Month(), from.Year(), messages(n)),
+						Level: level(n, busiestWeek), Now: !now.Before(from) && now.Before(weeks[i+1]),
+					})
+				}
+			}
+			y.Months = append(y.Months, m)
 		}
 		years = append(years, y)
 		// The phone's year picker lists the newest first, as it opens on them.
@@ -304,7 +366,7 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 		s.fail(w, err)
 		return
 	}
-	quarters, err := store.ChatQuarters(chatID, s.deps.Location)
+	months, err := store.ChatMonths(chatID, s.deps.Location)
 	if err != nil {
 		s.fail(w, err)
 		return
@@ -365,7 +427,14 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 			conv.NewerHref = fmt.Sprintf("%s?after=%d%s", path, window.Messages[len(window.Messages)-1].ID, keep)
 		}
 	}
-	conv.Years, conv.YearOptions = rail(path, keep, quarters, reading.In(s.deps.Location))
+	reading = reading.In(s.deps.Location)
+	weeks := weekBounds(time.Date(reading.Year(), reading.Month(), 1, 0, 0, 0, 0, s.deps.Location))
+	weekCounts, err := store.ChatCounts(chatID, weeks)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	conv.Years, conv.YearOptions = rail(path, keep, months, reading, weeks, weekCounts)
 
 	onPage := map[int64]bool{}
 	for _, m := range window.Messages {

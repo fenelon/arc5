@@ -7,8 +7,8 @@
 <div class="conv-body">
 <div class="messages" data-controller="scroll pager" data-scroll-to-value="{{.ScrollTo}}">
 {{template "messages-page" $}}</div>
-{{if .Years}}<nav class="rail" aria-label="Jump to a quarter" data-controller="rail">
-{{range .Years}}<div class="rail__year{{if .Now}} rail__year--now{{end}}"><span class="rail__label">{{.Label}}</span>{{range .Bands}}<a class="band{{if .Level}} band--{{.Level}}{{end}}{{if .Now}} band--now{{end}}" href="{{.Href}}" aria-label="{{.Label}}" title="{{.Label}}"></a>{{end}}</div>
+{{if .Years}}<nav class="rail" aria-label="Jump to a month or a week" data-controller="rail">
+{{range .Years}}<div class="rail__year{{if .Now}} rail__year--now{{end}}"><span class="rail__label">{{.Label}}</span>{{range .Months}}<a class="month{{if .Now}} month--now{{end}}" href="{{.Href}}" aria-label="{{.Label}}" title="{{.Label}}"><span class="month__name">{{.Name}}</span><span class="band{{if .Level}} band--{{.Level}}{{end}}"></span></a>{{with .Weeks}}<div class="weeks">{{range .}}<a class="week{{if .Now}} week--now{{end}}" href="{{.Href}}" aria-label="{{.Label}}" title="{{.Label}}"><span class="week__day">{{.Day}}</span><span class="band{{if .Level}} band--{{.Level}}{{end}}"></span></a>{{end}}</div>{{end}}{{end}}</div>
 {{end}}</nav>{{end}}
 </div>
 {{end}}{{end}}

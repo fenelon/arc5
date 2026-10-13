@@ -68,9 +68,9 @@ func TestSeedBuildsAnArchiveOnce(t *testing.T) {
 	if replacedPlans != 1 {
 		t.Errorf("want the floor plan replaced by an edit once, got %d", replacedPlans)
 	}
-	quarters, err := store.ChatQuarters(dan.ID, time.UTC)
-	if err != nil || len(quarters) < 8 {
-		t.Errorf("Dan's chat spans %d quarters; the year rail needs several years: %v", len(quarters), err)
+	months, err := store.ChatMonths(dan.ID, time.UTC)
+	if err != nil || len(months) < 24 {
+		t.Errorf("Dan's chat spans %d months; the year rail needs several years: %v", len(months), err)
 	}
 	window, err := store.ChatMessages(dan.ID, archive.Anchor{}, 60)
 	if err != nil {
