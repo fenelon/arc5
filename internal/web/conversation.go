@@ -43,7 +43,7 @@ type Message struct {
 	Text          string
 	Marked        []Piece // Text with the search's words marked, for the message opened from a search
 	Time          string
-	Edited        string // when it was last edited, or ""
+	Edited        string // when it was last edited, "at 15:04" or "on 2 Oct at 15:04", or ""
 	Deleted       string // when the source deleted it, or ""
 	Versions      []Version
 	Attachments   []Attachment
@@ -307,7 +307,15 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 			v.Sender = m.SenderName
 		}
 		if !m.EditedAt.IsZero() {
-			v.Edited = m.EditedAt.In(s.deps.Location).Format("15:04")
+			edited := m.EditedAt.In(s.deps.Location)
+			switch {
+			case edited.Format(time.DateOnly) == sent.Format(time.DateOnly):
+				v.Edited = edited.Format("at 15:04")
+			case edited.Year() == sent.Year():
+				v.Edited = edited.Format("on 2 Jan at 15:04")
+			default:
+				v.Edited = edited.Format("on 2 Jan 2006 at 15:04")
+			}
 		}
 		if !m.DeletedAt.IsZero() {
 			v.Deleted = m.DeletedAt.In(s.deps.Location).Format("2 Jan 2006")

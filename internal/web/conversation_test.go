@@ -297,3 +297,24 @@ func TestRailFollowsTheTimeZone(t *testing.T) {
 	has(t, s.page(path), fmt.Sprintf(`href="%s?date=2025-10-01" aria-label="October to December 2025, 1 message"`, path))
 	has(t, s.page(path+"?date=2025-10-01"), "happy new year")
 }
+
+// An edit made on a later day says which day.
+func TestEditedOnAnotherDayShowsTheDay(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	acc := s.account("Personal", "telegram")
+	s.say(acc, "Dan", "1", "first", noon)
+	s.say(acc, "Dan", "1", "second", noon, func(m *model.Message) { m.EditedAt = noon.Add(26 * time.Hour) })
+	body := s.page(fmt.Sprintf("/s/%d/c/%d", acc, s.chatID(acc, "Dan")))
+	has(t, body, "Edited on 29 Sep at 14:00, show earlier")
+}
+
+// The page tells the scroll controller to keep the newest message in view
+// while pictures above it load.
+func TestScrollControllerFollowsLoadingPictures(t *testing.T) {
+	s := newSite(t, "")
+	body := s.get(s.srv.asset("js/scroll_controller.js")).Body.String()
+	if !strings.Contains(body, `addEventListener("load"`) {
+		t.Error("the scroll controller does not scroll again when a picture loads")
+	}
+}
