@@ -289,6 +289,14 @@ func referenceExpired(err error) bool {
 	return ok && strings.HasPrefix(e.Type, "FILE_REFERENCE_") && (strings.HasSuffix(e.Type, "_EXPIRED") || strings.HasSuffix(e.Type, "_INVALID"))
 }
 
+// refusedChat reports that Telegram will not serve a chat, such as a
+// channel the owner was removed from: a request error that is not a flood
+// wait, a dead session or a server fault. Other chats carry on.
+func refusedChat(err error) bool {
+	e, ok := tgerr.As(err)
+	return ok && e.Code >= 400 && e.Code < 500 && e.Code != 420 && !unauthorized(err)
+}
+
 // fileGone reports a file Telegram no longer has.
 func fileGone(err error) bool {
 	return tgerr.Is(err, "FILE_ID_INVALID", "LOCATION_INVALID", "MEDIA_EMPTY", "MEDIA_INVALID", "FILE_REFERENCE_EMPTY")

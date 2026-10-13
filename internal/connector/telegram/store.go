@@ -264,3 +264,47 @@ func (s *updateStorage) SetUserAccessHash(_ context.Context, _, userID, hash int
 func (s *updateStorage) GetUserAccessHash(_ context.Context, _, userID int64) (int64, bool, error) {
 	return s.getHash(fmt.Sprintf("hash/user/%d", userID))
 }
+
+// keyGaps holds the chats with messages Telegram could not replay after a
+// long disconnection: for each, the newest message ID stored before the gap.
+// A gap is written before gotd moves on and removed only once it is filled,
+// so neither a live message nor a restart can hide it.
+const keyGaps = "gaps"
+
+var gapsMu sync.Mutex
+
+func loadGaps(state connector.State) (map[string]int, error) {
+	gaps := map[string]int{}
+	_, err := loadJSON(state, keyGaps, &gaps)
+	return gaps, err
+}
+
+// addGap records a gap from the given message ID, keeping an older one.
+func addGap(state connector.State, chat string, from int) error {
+	gapsMu.Lock()
+	defer gapsMu.Unlock()
+	gaps, err := loadGaps(state)
+	if err != nil {
+		return err
+	}
+	if old, ok := gaps[chat]; ok && old <= from {
+		return nil
+	}
+	gaps[chat] = from
+	return saveJSON(state, keyGaps, gaps)
+}
+
+// removeGap forgets a filled gap, unless an older one was recorded meanwhile.
+func removeGap(state connector.State, chat string, from int) error {
+	gapsMu.Lock()
+	defer gapsMu.Unlock()
+	gaps, err := loadGaps(state)
+	if err != nil {
+		return err
+	}
+	if old, ok := gaps[chat]; !ok || old != from {
+		return nil
+	}
+	delete(gaps, chat)
+	return saveJSON(state, keyGaps, gaps)
+}

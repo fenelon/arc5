@@ -155,6 +155,9 @@ func (c *Connector) Run(ctx context.Context, sink connector.Sink, state connecto
 	if err := r.syncChats(ctx); err != nil {
 		return r.fail(err)
 	}
+	if err := r.resumeGaps(); err != nil {
+		return err
+	}
 	err = together(ctx,
 		func(ctx context.Context) error { return r.conn.Listen(ctx, r.selfID) },
 		r.backfill,

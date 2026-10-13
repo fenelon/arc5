@@ -35,6 +35,7 @@ type history struct {
 	counts   map[string]int
 	calls    []string // "chat offset min limit"
 	failNext error
+	failGaps error // the answer to every request with a lower bound
 }
 
 var day0 = time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)
@@ -56,6 +57,9 @@ func (h *history) fetch(peer tg.InputPeerClass, offsetID, minID, limit int) (his
 	if err := h.failNext; err != nil {
 		h.failNext = nil
 		return historyPage{}, err
+	}
+	if minID > 0 && h.failGaps != nil {
+		return historyPage{}, h.failGaps
 	}
 	top := h.counts[chat]
 	if offsetID > 0 {

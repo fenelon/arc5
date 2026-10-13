@@ -129,7 +129,7 @@ func TestLiveStorageFailureKeepsTheUpdateForLater(t *testing.T) {
 }
 
 func TestCatchUpAfterALongDisconnection(t *testing.T) {
-	h := &history{counts: map[string]int{"user:1": 3, "chat:10": 2}}
+	h := &history{counts: map[string]int{"user:1": 3, "chat:10": 2, "channel:20": 1}}
 	sink, state := newMemSink(), signedIn(t)
 	d, stop := liveRun(t, h, sink, state)
 	defer stop()
@@ -147,10 +147,40 @@ func TestCatchUpAfterALongDisconnection(t *testing.T) {
 	if top, _ := loadTop(state, "user:1"); top != 250 {
 		t.Errorf("top = %d", top)
 	}
+	eventually(t, "the channel's history", func() bool { return len(sink.texts("channel:20")) == 1 })
 	h.mu.Lock()
-	h.counts["channel:20"] = 2
+	h.counts["channel:20"] = 3
 	h.mu.Unlock()
 	d.listener.channelTooLong(20)
-	eventually(t, "the channel's catch-up", func() bool { return len(sink.texts("channel:20")) == 2 })
+	eventually(t, "the channel's catch-up", func() bool { return len(sink.texts("channel:20")) == 3 })
 	_ = model.ChatGroup
+}
+
+// Review finding: a catch-up fetched from the newest stored message when it
+// ran, so a live message arriving first hid the gap; and the queue lived in
+// memory, so a restart lost it.
+func TestCatchUpSurvivesLiveMessagesAndRestarts(t *testing.T) {
+	h := &history{counts: map[string]int{"user:1": 3}}
+	sink, state := newMemSink(), signedIn(t)
+	d, stop := liveRun(t, h, sink, state)
+	eventually(t, "the history", func() bool { return len(sink.texts("user:1")) == 3 })
+	h.mu.Lock()
+	h.counts["user:1"] = 251
+	h.failGaps = errors.New("network down")
+	h.mu.Unlock()
+
+	d.listener.tooLong()
+	// A new message arrives live before the catch-up can run.
+	if err := push(t, d, &tg.UpdateNewMessage{Message: &tg.Message{ID: 251, PeerID: &tg.PeerUser{UserID: 1}, Date: int(day0.Unix()), Message: "m251"}}); err != nil {
+		t.Fatal(err)
+	}
+	stop() // a restart, such as saving a setting
+
+	h.mu.Lock()
+	h.failGaps = nil
+	h.mu.Unlock()
+	_, stop = liveRun(t, h, sink, state)
+	defer stop()
+	eventually(t, "the gap filled", func() bool { return len(sink.texts("user:1")) == 251 })
+	eventually(t, "the gap marker gone", func() bool { g, _ := loadGaps(state); return len(g) == 0 })
 }

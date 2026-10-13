@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/gotd/td/tg"
 
@@ -177,30 +178,58 @@ func (r *run) deleteShared(numbers []int) error {
 }
 
 // tooLong is called when Telegram cannot replay everything missed while
-// disconnected: every archived chat is brought up to date from its newest
-// stored message.
+// disconnected. Before gotd moves on, each archived chat's newest stored
+// message is recorded as the start of a gap, which the catch-up fills.
 func (r *run) tooLong() {
 	r.mu.Lock()
 	order := r.order
 	r.mu.Unlock()
-	go func() {
-		for _, chat := range order {
-			select {
-			case r.catchUps <- chat:
-			case <-r.ctx.Done():
-				return
-			}
-		}
-	}()
+	for _, chat := range order {
+		r.markGap(chat)
+	}
 }
 
 // channelTooLong is tooLong for one supergroup or channel.
 func (r *run) channelTooLong(channelID int64) {
+	r.markGap(fmt.Sprintf("channel:%d", channelID))
+}
+
+// markGap records a gap in an archived chat that holds messages, and queues
+// its catch-up. A chat with nothing stored is left to the backfill.
+func (r *run) markGap(chat string) {
+	if archived, err := r.sink.ChatArchived(chat); err != nil || !archived {
+		return
+	}
+	top, err := loadTop(r.state, chat)
+	if err != nil || top == 0 {
+		return
+	}
+	if err := addGap(r.state, chat, top); err != nil {
+		return
+	}
+	r.queueCatchUp(chat)
+}
+
+// queueCatchUp asks the catch-up worker to fill a chat's gap. The gap is
+// already recorded, so a full queue only delays it to the next run.
+func (r *run) queueCatchUp(chat string) {
 	select {
-	case r.catchUps <- fmt.Sprintf("channel:%d", channelID):
-	case <-r.ctx.Done():
+	case r.catchUps <- chat:
+	default:
 	}
 }
+
+// resumeGaps queues the gaps an earlier run left unfilled.
+func (r *run) resumeGaps() error {
+	gaps, err := loadGaps(r.state)
+	for chat := range gaps {
+		r.queueCatchUp(chat)
+	}
+	return err
+}
+
+// catchUpRetry is how long a catch-up that failed waits before trying again.
+const catchUpRetry = 30 * time.Second
 
 func (r *run) catchUpWorker(ctx context.Context) error {
 	for {
@@ -208,20 +237,38 @@ func (r *run) catchUpWorker(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case chat := <-r.catchUps:
-			if err := r.catchUp(ctx, chat); err != nil && (errors.Is(err, connector.ErrStorage) || unauthorized(err)) {
+			err := r.catchUp(ctx, chat)
+			switch {
+			case err == nil, ctx.Err() != nil:
+			case errors.Is(err, connector.ErrStorage), unauthorized(err):
 				return err
+			case refusedChat(err):
+				// Telegram will not show this chat any more; the gap cannot be filled.
+				gaps, _ := loadGaps(r.state)
+				_ = removeGap(r.state, chat, gaps[chat])
+			default:
+				go func() {
+					if r.c.sleep(ctx, catchUpRetry) == nil {
+						r.queueCatchUp(chat)
+					}
+				}()
 			}
 		}
 	}
 }
 
-// catchUp fetches a chat's messages newer than its newest stored one.
+// catchUp fills a chat's gap: every message newer than the gap's start,
+// newest first. The gap is forgotten only once all of them are stored.
 func (r *run) catchUp(ctx context.Context, chat string) error {
-	if archived, err := r.sink.ChatArchived(chat); err != nil || !archived {
+	gaps, err := loadGaps(r.state)
+	if err != nil {
 		return err
 	}
-	top, err := loadTop(r.state, chat)
-	if err != nil {
+	from, ok := gaps[chat]
+	if !ok {
+		return nil
+	}
+	if archived, err := r.sink.ChatArchived(chat); err != nil || !archived {
 		return err
 	}
 	peer, ok := r.inputPeer(chat)
@@ -233,13 +280,13 @@ func (r *run) catchUp(ctx context.Context, chat string) error {
 		var page historyPage
 		if err := r.call(ctx, func() error {
 			var err error
-			page, err = r.conn.History(ctx, peer, offset, top, historyPageSize)
+			page, err = r.conn.History(ctx, peer, offset, from, historyPageSize)
 			return err
 		}); err != nil {
 			return err
 		}
 		if len(page.Messages) == 0 {
-			return nil
+			return removeGap(r.state, chat, from)
 		}
 		r.learn(page.Users, page.Chats)
 		for _, m := range page.Messages {
