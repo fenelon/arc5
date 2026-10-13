@@ -117,6 +117,7 @@ type run struct {
 	ctx      context.Context         // the run's
 	abort    context.CancelCauseFunc // stops the run with a reason
 	catchUps chan string             // chats to bring up to date after a long disconnection
+	media    *mediaQueue             // files and pictures to download
 }
 
 // Run archives the account until ctx ends: it brings the chat list up to
@@ -158,6 +159,7 @@ func (c *Connector) Run(ctx context.Context, sink connector.Sink, state connecto
 		func(ctx context.Context) error { return r.conn.Listen(ctx, r.selfID) },
 		r.backfill,
 		r.catchUpWorker,
+		r.mediaWorker,
 	)
 	if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) {
 		err = cause // a live update could not be stored

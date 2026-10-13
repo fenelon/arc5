@@ -119,7 +119,10 @@ func (r *run) ensureChat(chat model.Chat) error {
 	}
 	r.known[chat.SourceID] = chat
 	r.mu.Unlock()
-	return nil
+	if archived, err := r.sink.ChatArchived(chat.SourceID); err != nil || !archived {
+		return err
+	}
+	return r.queueAvatar(model.AvatarChat, chat.SourceID)
 }
 
 // refreshChats renames chats already stored whose name an update changed.

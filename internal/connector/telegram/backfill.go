@@ -162,6 +162,9 @@ func (r *run) store(m tg.MessageClass, live bool) error {
 	if err != nil {
 		return err
 	}
+	for i := range media {
+		media[i].live = live
+	}
 	r.queueMedia(msg.ChatSourceID, msg.SourceID, refs, media, live)
 	return raiseTop(r.state, msg.ChatSourceID, m.GetID())
 }
@@ -188,10 +191,5 @@ func (r *run) upsertSender(s model.Sender) error {
 	r.mu.Lock()
 	r.senders[s.SourceID] = s
 	r.mu.Unlock()
-	return nil
-}
-
-// queueMedia hands the attachments the archive wants downloaded to the
-// downloader. (Task 11 adds the downloader.)
-func (r *run) queueMedia(chat, message string, refs []model.AttachmentRef, media []mediaItem, live bool) {
+	return r.queueAvatar(model.AvatarSender, s.SourceID)
 }

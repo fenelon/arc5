@@ -135,6 +135,7 @@ type mediaItem struct {
 	Size      int64
 	DC        int
 	Ephemeral bool
+	live      bool // found live or asked for, so not paced like the backfill
 }
 
 // mapMessage turns a Telegram message into the archive's terms, with the
