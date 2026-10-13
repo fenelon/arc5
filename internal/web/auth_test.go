@@ -41,7 +41,9 @@ func TestPasswordHashing(t *testing.T) {
 			t.Errorf("wrong password %q was accepted", wrong)
 		}
 	}
-	for _, broken := range []string{"", "argon2id$", "plain$1$2$3$4$5", "argon2id$x$2$1$AAAA$AAAA", "argon2id$19456$2$1$***$AAAA"} {
+	for _, broken := range []string{"", "argon2id$", "plain$1$2$3$4$5", "argon2id$x$2$1$AAAA$AAAA", "argon2id$19456$2$1$***$AAAA",
+		"argon2id$19456$0$1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "argon2id$4294967295$2$1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"argon2id$19456$2$255$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"} {
 		if verifyPassword(broken, "correct horse") {
 			t.Errorf("broken hash %q verified", broken)
 		}
@@ -216,5 +218,22 @@ func TestSessionCookie(t *testing.T) {
 	}
 	if plain.Result().Cookies()[0].Secure {
 		t.Error("the cookie is Secure on a plain HTTP request, so it would never be sent back")
+	}
+}
+
+// Two first-run forms sent at once cannot both choose the password.
+func TestFirstPasswordIsSetOnce(t *testing.T) {
+	a, _ := newAuth(t, "")
+	if err := a.setFirstPassword("first horse"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.setFirstPassword("second horse"); !errors.Is(err, errPasswordExists) {
+		t.Fatalf("a second first password = %v, want errPasswordExists", err)
+	}
+	if ok, _ := a.check("first horse"); !ok {
+		t.Error("the first password was replaced")
+	}
+	if err := a.setFirstPassword("short"); !errors.Is(err, errShortPassword) {
+		t.Errorf("a short first password = %v", err)
 	}
 }

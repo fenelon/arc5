@@ -53,3 +53,16 @@ func TestConnectorStateIsPerAccount(t *testing.T) {
 		t.Fatalf("other account sees state %v", v)
 	}
 }
+
+func TestSetSettingIfAbsent(t *testing.T) {
+	s := openTemp(t)
+	if set, err := s.SetSettingIfAbsent("k", "first"); err != nil || !set {
+		t.Fatalf("first = %v, %v", set, err)
+	}
+	if set, err := s.SetSettingIfAbsent("k", "second"); err != nil || set {
+		t.Fatalf("second = %v, %v; want it refused", set, err)
+	}
+	if v, _, _ := s.Setting("k"); v != "first" {
+		t.Errorf("value = %q", v)
+	}
+}

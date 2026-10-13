@@ -126,7 +126,7 @@ func TestFetchNow(t *testing.T) {
 		t.Fatalf("fetch: %d to %q, requested %v", rec.Code, rec.Header().Get("Location"), s.runner.requested)
 	}
 	// Only an address on this site is followed back.
-	for _, back := range []string{"https://evil.example/", "//evil.example/", `/\evil.example`, "", "javascript:alert(1)"} {
+	for _, back := range []string{"https://evil.example/", "//evil.example/", `/\evil.example`, "", "javascript:alert(1)", "/\t/evil.example/", "/\x01/x", "/\x7f"} {
 		if rec := s.post(path, url.Values{"back": {back}}); !redirectsTo(rec, "/") {
 			t.Errorf("back %q: redirected to %q, want /", back, rec.Header().Get("Location"))
 		}

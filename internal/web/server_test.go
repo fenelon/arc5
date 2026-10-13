@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -357,5 +358,40 @@ func TestParallelLoginsAreThrottled(t *testing.T) {
 	}
 	if checked > 5 || checked+refused != tries {
 		t.Fatalf("%d wrong passwords were checked and %d refused; want at most 5 checked", checked, refused)
+	}
+}
+
+// Review Focus 2, for every route: no page without a session, and no change
+// without the session's token.
+func TestEveryRouteNeedsASessionAndEveryChangeTheToken(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	acc := s.fakeAccount("Personal")
+	s.say(acc, "Dan", "1", "hello", noon)
+	chat := s.chatID(acc, "Dan")
+	gets := []string{"/", "/s/chats", fmt.Sprintf("/s/%d", acc), fmt.Sprintf("/s/%d/c/%d", acc, chat), fmt.Sprintf("/s/%d/results?q=x", acc),
+		"/media/1", "/sources", "/sources/new", fmt.Sprintf("/sources/%d", acc), fmt.Sprintf("/sources/%d/chats", acc),
+		fmt.Sprintf("/sources/%d/login", acc), "/settings"}
+	posts := []string{"/logout", "/media/1/fetch", "/sources/new", fmt.Sprintf("/sources/%d/name", acc), fmt.Sprintf("/sources/%d/settings", acc),
+		fmt.Sprintf("/sources/%d/signout", acc), fmt.Sprintf("/sources/%d/remove", acc), fmt.Sprintf("/sources/%d/chats", acc),
+		fmt.Sprintf("/sources/%d/login", acc), fmt.Sprintf("/sources/%d/login/cancel", acc),
+		"/settings/appearance", "/settings/languages", "/settings/attachments", "/settings/password"}
+
+	stranger := &site{t: t, store: s.store, srv: s.srv, cookies: map[string]*http.Cookie{}}
+	for _, path := range gets {
+		if rec := stranger.get(path); !redirectsTo(rec, "/login") {
+			t.Errorf("GET %s without a session: %d to %q", path, rec.Code, rec.Header().Get("Location"))
+		}
+	}
+	for _, path := range posts {
+		if rec := stranger.post(path, url.Values{"csrf": {s.csrf}}); !redirectsTo(rec, "/login") {
+			t.Errorf("POST %s without a session: %d", path, rec.Code)
+		}
+		if rec := s.post(path, url.Values{"csrf": {"made-up"}}); rec.Code != http.StatusForbidden {
+			t.Errorf("POST %s with a wrong token: %d, want 403", path, rec.Code)
+		}
+	}
+	if got, _ := s.store.Account(acc); !got.RemovedAt.IsZero() || got.Label != "Personal" {
+		t.Error("a refused request changed the source")
 	}
 }

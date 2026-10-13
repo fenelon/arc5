@@ -76,7 +76,9 @@ func (s *Server) serveMedia(w http.ResponseWriter, r *http.Request, _ archive.Se
 
 // localPath returns back if it is an address on this site, else "/".
 func localPath(back string) string {
-	if !strings.HasPrefix(back, "/") || strings.HasPrefix(back, "//") || strings.ContainsAny(back, "\\\r\n") {
+	if !strings.HasPrefix(back, "/") || strings.HasPrefix(back, "//") || strings.ContainsFunc(back, func(r rune) bool {
+		return r == '\\' || r < 0x20 || r == 0x7f // browsers drop tabs and newlines, which would turn "/\t/x" into "//x"
+	}) {
 		return "/"
 	}
 	return back
