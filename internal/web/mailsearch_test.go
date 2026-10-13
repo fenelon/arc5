@@ -50,7 +50,8 @@ func TestChooseFolders(t *testing.T) {
 	lacks(t, page, "Chats of Home mail", "Monday planning")
 
 	panel := m.page(fmt.Sprintf("/sources/%d", m.box))
-	has(t, panel, "Choose which of the 4 folders are archived")
+	has(t, panel, "Choose which of the 4 folders are archived", ">Open its mail</a>", "On Gmail, Inbox, Sent and All Mail")
+	lacks(t, panel, "Open its chats")
 	lacks(t, panel, "chats are archived")
 
 	form := url.Values{"csrf": {m.csrf}}

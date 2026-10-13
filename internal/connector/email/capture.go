@@ -285,72 +285,95 @@ func (r *run) history(ctx context.Context, folders []model.Folder) (int, error) 
 	if !r.o.since.IsZero() {
 		since = r.o.since.Unix()
 	}
-	done := 0
-	for _, f := range folders {
+	cps := make([]checkpoint, len(folders))
+	windows := make([]uint32, len(folders))
+	for i, f := range folders {
 		cp, err := r.load(f.SourceID)
 		if err != nil {
-			return done, err
+			return 0, err
 		}
 		if cp.Done && (since < cp.Since || (since == 0 && cp.Since != 0)) {
 			// The owner lengthened the limit: read the folder again; mail
 			// already stored is only matched, not downloaded.
 			cp.Done, cp.Oldest = false, cp.Next
 		}
-		window := uint32(historyWindow)
-		for !cp.Done && !r.o.paused {
-			if r.c.now().After(deadline) && r.c.slice > 0 {
-				break
-			}
-			// Search a window of UIDs just below where history stands,
-			// widening it while it finds nothing, rather than listing every
-			// remaining UID each time (Gmail counts that against a quota).
-			var uids []uint32
-			from := uint32(1)
-			if cp.Oldest > 1 {
-				if cp.Oldest > window {
-					from = cp.Oldest - window
-				}
-				if _, err := r.cl.Select(ctx, f.SourceID); err != nil {
-					return done, err
-				}
-				if uids, err = r.cl.Search(ctx, from, cp.Oldest-1, r.o.since); err != nil {
-					return done, err
-				}
-			}
-			if len(uids) == 0 && from > 1 {
-				cp.Oldest, window = from, min(window*4, 1<<30)
-				if err := r.save(f.SourceID, cp); err != nil {
-					return done, err
-				}
+		cps[i], windows[i] = cp, historyWindow
+	}
+	// The folders take turns, a batch each, so none waits for another to
+	// finish.
+	for !r.o.paused {
+		stepped := false
+		for i, f := range folders {
+			if cps[i].Done {
 				continue
 			}
-			if len(uids) == 0 {
-				cp.Done, cp.Since = true, since
-				if err := r.save(f.SourceID, cp); err != nil {
-					return done, err
-				}
-				break
+			if r.c.slice > 0 && r.c.now().After(deadline) {
+				return countDone(cps), nil
 			}
-			step := uids[max(0, len(uids)-batch):]
-			if err := r.store(ctx, f.SourceID, step); err != nil {
-				return done, err
+			if err := r.historyStep(ctx, f.SourceID, &cps[i], &windows[i], since); err != nil {
+				return countDone(cps), err
 			}
-			cp.Oldest = step[0]
-			if err := r.save(f.SourceID, cp); err != nil {
-				return done, err
-			}
-			if err := r.c.sleep(ctx, r.o.pause); err != nil {
-				return done, err
-			}
-			if r.c.slice == 0 {
-				break // one batch per cycle
-			}
+			stepped = true
 		}
-		if cp.Done {
-			done++
+		if !stepped || r.c.slice == 0 {
+			break // all done, or one batch each per cycle
 		}
 	}
-	return done, nil
+	return countDone(cps), nil
+}
+
+func countDone(cps []checkpoint) int {
+	n := 0
+	for _, cp := range cps {
+		if cp.Done {
+			n++
+		}
+	}
+	return n
+}
+
+// historyStep stores the next batch of a folder's history, newest first, or
+// marks its history done.
+func (r *run) historyStep(ctx context.Context, folder string, cp *checkpoint, window *uint32, since int64) error {
+	for {
+		// Search a window of UIDs just below where history stands,
+		// widening it while it finds nothing, rather than listing every
+		// remaining UID each time (Gmail counts that against a quota).
+		var uids []uint32
+		from := uint32(1)
+		if cp.Oldest > 1 {
+			if cp.Oldest > *window {
+				from = cp.Oldest - *window
+			}
+			if _, err := r.cl.Select(ctx, folder); err != nil {
+				return err
+			}
+			var err error
+			if uids, err = r.cl.Search(ctx, from, cp.Oldest-1, r.o.since); err != nil {
+				return err
+			}
+		}
+		if len(uids) == 0 && from > 1 {
+			cp.Oldest, *window = from, min(*window*4, 1<<30)
+			if err := r.save(folder, *cp); err != nil {
+				return err
+			}
+			continue
+		}
+		if len(uids) == 0 {
+			cp.Done, cp.Since = true, since
+			return r.save(folder, *cp)
+		}
+		step := uids[max(0, len(uids)-batch):]
+		if err := r.store(ctx, folder, step); err != nil {
+			return err
+		}
+		cp.Oldest = step[0]
+		if err := r.save(folder, *cp); err != nil {
+			return err
+		}
+		return r.c.sleep(ctx, r.o.pause)
+	}
 }
 
 // historyWindow is how many UIDs below where history stands one search
@@ -433,6 +456,7 @@ func (r *run) store(ctx context.Context, folder string, uids []uint32) error {
 	} else if err != nil {
 		return err
 	}
+	var need []header
 	for _, h := range heads {
 		if h.MessageID != "" {
 			chats, err := r.sink.LookupChats(h.MessageID, threadKinds)
@@ -446,50 +470,143 @@ func (r *run) store(ctx context.Context, folder string, uids []uint32) error {
 				continue
 			}
 		}
-		tries, err := r.attempt(folder, h.UID)
-		if err != nil {
-			return err
-		}
-		if tries >= maxAttempts {
-			// Earlier tries ended the connection (a timeout on a huge
-			// message, say): stop trying.
-			if err := r.stand(ctx, folder, h, errors.New("each try failed")); err != nil {
+		need = append(need, h)
+	}
+	for _, group := range fetchGroups(need) {
+		if len(group) > 1 {
+			fetched, err := r.many(ctx, folder, group)
+			if err != nil {
 				return err
 			}
-			continue
-		}
-		raw, err := r.cl.Fetch(ctx, h.UID, h.Size > maxMessage)
-		if errors.Is(err, errGone) {
-			continue // expunged since it was listed
-		}
-		if err != nil {
-			if errors.Is(err, errServerRefused) && tries+1 >= maxAttempts {
-				if err := r.stand(ctx, folder, h, err); err != nil {
-					return err
-				}
+			if fetched {
 				continue
 			}
-			return err
 		}
-		if h.Size > maxMessage {
-			raw = append(raw, []byte(tooLarge+"\r\n")...)
-		}
-		received := h.Received
-		if received.IsZero() {
-			received = r.c.now()
-		}
-		chat, id, err := Store(r.sink, raw, received, func(address string) bool { return r.o.own[address] })
-		if err != nil {
-			return fmt.Errorf("storing %s UID %d: %w", folder, h.UID, err)
-		}
-		if err := r.sink.FileInFolder(folder, h.UID, chat, id); err != nil {
-			return err
-		}
-		if err := r.fetched(folder, h.UID); err != nil {
-			return err
+		for _, h := range group {
+			if err := r.one(ctx, folder, h); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+// Messages are fetched together up to these sizes; a larger one alone.
+const (
+	groupBytes = 16 << 20
+	aloneBytes = 4 << 20
+)
+
+// fetchGroups splits messages into requests: small ones together, up to
+// batch messages and groupBytes, and each large one alone.
+func fetchGroups(heads []header) [][]header {
+	var (
+		out  [][]header
+		cur  []header
+		size int64
+	)
+	for _, h := range heads {
+		if h.Size > aloneBytes {
+			out = append(out, []header{h})
+			continue
+		}
+		if len(cur) > 0 && (len(cur) >= batch || size+h.Size > groupBytes) {
+			out, cur, size = append(out, cur), nil, 0
+		}
+		cur, size = append(cur, h), size+h.Size
+	}
+	if len(cur) > 0 {
+		out = append(out, cur)
+	}
+	return out
+}
+
+// many fetches a group of messages in one request and stores them. It
+// reports false, having stored nothing, when the group should be fetched
+// one by one instead: the server refused the request, or an earlier try at
+// it ended the connection, so one message may be at fault.
+func (r *run) many(ctx context.Context, folder string, group []header) (bool, error) {
+	tries := map[uint32]int{}
+	if _, err := loadJSON(r.state, attemptsKey(folder), &tries); err != nil {
+		return false, err
+	}
+	uids := make([]uint32, len(group))
+	for i, h := range group {
+		if tries[h.UID] > 0 {
+			return false, nil
+		}
+		uids[i] = h.UID
+	}
+	for _, uid := range uids {
+		tries[uid] = 1
+	}
+	if err := saveJSON(r.state, attemptsKey(folder), tries); err != nil {
+		return false, err
+	}
+	raws, err := r.cl.FetchMany(ctx, uids)
+	if errors.Is(err, errServerRefused) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	for _, h := range group {
+		raw, ok := raws[h.UID]
+		if !ok {
+			continue // expunged since it was listed
+		}
+		if err := r.keep(folder, h, raw); err != nil {
+			return false, err
+		}
+	}
+	for _, uid := range uids {
+		delete(tries, uid)
+	}
+	return true, saveJSON(r.state, attemptsKey(folder), tries)
+}
+
+// one fetches a single message and stores it, counting tries so a message
+// the server will not hand over is replaced by a note in the end.
+func (r *run) one(ctx context.Context, folder string, h header) error {
+	tries, err := r.attempt(folder, h.UID)
+	if err != nil {
+		return err
+	}
+	if tries >= maxAttempts {
+		// Earlier tries ended the connection (a timeout on a huge
+		// message, say): stop trying.
+		return r.stand(ctx, folder, h, errors.New("each try failed"))
+	}
+	raw, err := r.cl.Fetch(ctx, h.UID, h.Size > maxMessage)
+	if errors.Is(err, errGone) {
+		return nil // expunged since it was listed
+	}
+	if err != nil {
+		if errors.Is(err, errServerRefused) && tries+1 >= maxAttempts {
+			return r.stand(ctx, folder, h, err)
+		}
+		return err
+	}
+	if h.Size > maxMessage {
+		raw = append(raw, []byte(tooLarge+"\r\n")...)
+	}
+	if err := r.keep(folder, h, raw); err != nil {
+		return err
+	}
+	return r.fetched(folder, h.UID)
+}
+
+// keep stores a fetched message and files it in the folder.
+func (r *run) keep(folder string, h header, raw []byte) error {
+	received := h.Received
+	if received.IsZero() {
+		received = r.c.now()
+	}
+	chat, id, err := Store(r.sink, raw, received, func(address string) bool { return r.o.own[address] })
+	if err != nil {
+		return fmt.Errorf("storing %s UID %d: %w", folder, h.UID, err)
+	}
+	return r.sink.FileInFolder(folder, h.UID, chat, id)
 }
 
 // serveRequests answers "Fetch now" from the kept originals. Only a storage

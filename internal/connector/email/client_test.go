@@ -181,6 +181,10 @@ func TestClientAgainstAServer(t *testing.T) {
 	if _, err := c.Fetch(ctx, 99, false); !errors.Is(err, errGone) {
 		t.Errorf("a missing message: %v", err)
 	}
+	many, err := c.FetchMany(ctx, []uint32{1, 2, 99})
+	if err != nil || len(many) != 2 || !bytes.Contains(many[1], []byte("First body.")) || !bytes.Contains(many[2], []byte("Subject: Two")) {
+		t.Errorf("many = %d messages, %v", len(many), err)
+	}
 
 	// Nothing the connector did marked mail as read.
 	other := srv.other(t)

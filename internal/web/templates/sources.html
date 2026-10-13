@@ -18,7 +18,7 @@
 </html>{{end}}
 
 {{define "source-panel"}}{{$p := .P}}{{$page := .Page}}<section class="panel" id="panel" aria-labelledby="panel-title">
-<header class="panel__head">{{template "logo" $p.Logo}}<h2 class="panel__title" id="panel-title">Settings for {{$p.Name}}</h2><a class="panel__open" href="{{$p.OpenHref}}">Open its chats</a></header>
+<header class="panel__head">{{template "logo" $p.Logo}}<h2 class="panel__title" id="panel-title">Settings for {{$p.Name}}</h2><a class="panel__open" href="{{$p.OpenHref}}">Open its {{if $p.Mail}}mail{{else}}chats{{end}}</a></header>
 {{if $page.Problem}}<p class="alert panel__note" role="alert">{{$page.Problem}}</p>
 {{else if eq $page.Saved "name" "settings"}}<p class="saved panel__note" role="status">Saved.{{if eq $page.Saved "settings"}} The source starts again with them.{{end}}</p>
 {{else if eq $page.Saved "signout"}}<p class="saved panel__note" role="status">Signed out. It stops archiving until you log in again.</p>
@@ -31,7 +31,7 @@
 </div>
 <div class="panel__cell">
 {{if $p.Mail}}<h3 class="panel__label">Folders</h3>
-<p class="panel__help">The Inbox, Sent and your own folders are archived. Drafts, Junk and Trash only when you switch them on.</p>
+<p class="panel__help">Folders switched on are archived. On Gmail, Inbox, Sent and All Mail start on, as All Mail holds every label; elsewhere, every folder but Drafts, Junk and Trash.</p>
 <p><a class="panel__link" href="{{$p.ChatsHref}}">Choose which of the {{$p.Chats}} folders are archived</a></p>{{else}}<h3 class="panel__label">Chats</h3>
 <p class="panel__help">Private chats and groups are archived as they appear. Channels and bots only when you switch them on.</p>
 <p><a class="panel__link" href="{{$p.ChatsHref}}">Choose which of the {{$p.Chats}} chats are archived</a></p>{{end}}

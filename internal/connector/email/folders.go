@@ -82,17 +82,18 @@ func folderPlan(list []mailbox) []model.Folder {
 	return out
 }
 
-// captureOrder puts All Mail first, so a Gmail message is downloaded from
-// there and only matched in the Inbox and Sent; then the Inbox, Sent, and the
-// rest in the server's order.
+// captureOrder puts the Inbox first, then Sent, then All Mail, then the rest
+// in the server's order, so the folders the owner reads first fill first. A
+// Gmail message is downloaded from whichever folder reaches it first and
+// only matched, by Message-ID, in the others.
 func captureOrder(folders []model.Folder) []model.Folder {
 	rank := func(r model.FolderRole) int {
 		switch r {
-		case model.FolderAll:
-			return 0
 		case model.FolderInbox:
-			return 1
+			return 0
 		case model.FolderSent:
+			return 1
+		case model.FolderAll:
 			return 2
 		}
 		return 3

@@ -20,6 +20,7 @@ type fakeServer struct {
 	changed  chan struct{}
 	dials    int
 	full     []string // "folder/uid" of every whole-message fetch
+	requests []string // the folder of every FETCH of whole messages, one per command
 	dialErr  error
 	listErr  error
 	// refuseFetch makes fetching "folder/uid" fail as Gmail's "NO Some
@@ -239,8 +240,34 @@ func (c *fakeClient) Fetch(_ context.Context, uid uint32, headersOnly bool) ([]b
 	if headersOnly {
 		return headerOf(m.raw), nil
 	}
+	c.s.requests = append(c.s.requests, c.sel)
 	c.s.full = append(c.s.full, fmt.Sprintf("%s/%d", c.sel, uid))
 	return m.raw, nil
+}
+
+func (c *fakeClient) FetchMany(_ context.Context, uids []uint32) (map[uint32][]byte, error) {
+	c.s.mu.Lock()
+	defer c.s.mu.Unlock()
+	c.s.requests = append(c.s.requests, c.sel)
+	out := map[uint32][]byte{}
+	for _, uid := range uids {
+		if c.s.refuseFetch[fmt.Sprintf("%s/%d", c.sel, uid)] {
+			return nil, errFakeRefused // Gmail refuses the whole command
+		}
+	}
+	for _, uid := range uids {
+		if m, ok := c.message(uid); ok {
+			c.s.full = append(c.s.full, fmt.Sprintf("%s/%d", c.sel, uid))
+			out[uid] = m.raw
+		}
+	}
+	return out, nil
+}
+
+func (s *fakeServer) fetchRequests() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.requests...)
 }
 
 func (c *fakeClient) Idle(ctx context.Context, wait time.Duration) error {
