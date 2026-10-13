@@ -308,6 +308,10 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 	path := fmt.Sprintf("/s/%s/c/%d", sel.Key, chatID)
 	q := searchQuery(r)
 	keep := keepQuery(q)
+	searching := keep != ""
+	if n := chatCount(r); n > chatsPerPage {
+		keep += fmt.Sprintf("&chats=%d", n) // the chat list stays as long as the owner made it
+	}
 	// part=messages asks for the page's messages alone, loaded in place as
 	// the reader scrolls; forms in it return to the conversation itself.
 	query := r.URL.Query()
@@ -322,7 +326,10 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 	}
 	conv := &Conversation{Title: chat.Title, BackHref: "/s/" + sel.Key, SelfHref: self}
 	if keep != "" {
-		conv.Query, conv.BackHref = q, "/s/"+sel.Key+"?"+keep[1:]
+		conv.BackHref = "/s/" + sel.Key + "?" + keep[1:]
+	}
+	if searching {
+		conv.Query = q
 	}
 	conv.Subtitle = kindLabel(chat.Kind)
 	if service, known := s.serviceOf(chat.AccountID); known {
@@ -369,7 +376,7 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 			Anchor: fmt.Sprintf("m%d", m.ID), Service: m.Kind == model.KindService, Outgoing: m.Outgoing,
 			Target: m.ID == target, ForwardedFrom: m.ForwardedFrom, Text: m.Text, Time: sent.Format("15:04"),
 		}
-		if v.Target && keep != "" {
+		if v.Target && searching {
 			v.Marked = pieces(s.deps.Index.Searcher().Highlight(q, m.Text))
 		}
 		if !m.Outgoing && chat.Kind != model.ChatPrivate {
