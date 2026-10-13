@@ -44,6 +44,7 @@ func (r *run) syncChats(ctx context.Context) error {
 		offset dialogOffset
 		order  []string
 		seen   = map[string]bool{}
+		lastAt = map[string]int64{}
 	)
 	for range maxDialogPages {
 		var page dialogPage
@@ -67,6 +68,9 @@ func (r *run) syncChats(ctx context.Context) error {
 			}
 			seen[chat.SourceID] = true
 			order = append(order, chat.SourceID)
+			if date := topDate(page, d); date != 0 {
+				lastAt[chat.SourceID] = date
+			}
 		}
 		if page.Next == nil || len(page.Dialogs) == 0 || (page.Next.ID == offset.ID && page.Next.Date == offset.Date) {
 			break
@@ -74,9 +78,20 @@ func (r *run) syncChats(ctx context.Context) error {
 		offset = *page.Next
 	}
 	r.mu.Lock()
-	r.order = order
+	r.order, r.lastAt = order, lastAt
 	r.mu.Unlock()
 	return nil
+}
+
+// topDate is when a dialog's newest message was sent, from the page that
+// listed it, or 0 if the page does not say.
+func topDate(page dialogPage, d *tg.Dialog) int64 {
+	for _, m := range page.Messages {
+		if m.GetID() == d.TopMessage && peerSourceID(messagePeer(m)) == peerSourceID(d.Peer) {
+			return messageDate(m)
+		}
+	}
+	return 0
 }
 
 // inputPeer names a chat for a request, from what this run has seen or
