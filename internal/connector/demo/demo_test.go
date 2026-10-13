@@ -35,19 +35,19 @@ func TestSeedBuildsAnArchiveOnce(t *testing.T) {
 	for _, c := range chats {
 		titles[c.Title] = c
 	}
-	for _, want := range []string{"Dan Whitfield", "Marina Sokolova", "Familia: Marina y Pablo", "Походы 2026", "Saved Messages"} {
+	for _, want := range []string{"Dan Whitfield", "Marina Sokolova", "Family: Marina and Pablo", "Hikes 2026", "Saved Messages"} {
 		if _, ok := titles[want]; !ok {
 			t.Errorf("no chat titled %q in %v", want, chats)
 		}
 	}
 
 	dan := titles["Dan Whitfield"]
-	for _, title := range []string{"Dan Whitfield", "Marina Sokolova", "Familia: Marina y Pablo"} {
+	for _, title := range []string{"Dan Whitfield", "Marina Sokolova", "Family: Marina and Pablo"} {
 		if titles[title].AvatarSHA == "" {
 			t.Errorf("%s has no picture", title)
 		}
 	}
-	if titles["Походы 2026"].AvatarSHA != "" {
+	if titles["Hikes 2026"].AvatarSHA != "" {
 		t.Error("every chat has a picture; the demo should show initials too")
 	}
 	all, err := store.ChatMessages(dan.ID, archive.Anchor{}, 1000)

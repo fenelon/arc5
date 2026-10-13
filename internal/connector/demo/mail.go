@@ -161,24 +161,24 @@ func seedMail(store *archive.Store) error {
 	)
 	photo := func(bg, fg color.RGBA) []byte { return portrait(bg, fg) }
 	letters := []letter{
-		{id: "olg-1@example.com", from: "Олег Ветров <oleg.vetrov@example.com>", to: me, subject: "Отчёт о походе и расходы", date: on(time.July, 12, 19, 5),
-			plain: "Привет! Выложил фото с похода. Расходы сведу к выходным.", folders: []string{"INBOX"}},
-		{id: "olg-2@example.org", inReplyTo: "olg-1@example.com", refs: []string{"olg-1@example.com"}, from: me, to: "Олег Ветров <oleg.vetrov@example.com>",
-			subject: "Re: Отчёт о походе и расходы", date: on(time.July, 12, 21, 30), plain: "Отлично, жду таблицу.", folders: []string{"Sent"}},
-		{id: "olg-3@example.com", inReplyTo: "olg-2@example.org", refs: []string{"olg-1@example.com", "olg-2@example.org"}, from: "Олег Ветров <oleg.vetrov@example.com>", to: me,
-			subject: "Re: Отчёт о походе и расходы", date: on(time.July, 14, 8, 15), plain: "Свёл расходы в таблицу, посмотрите, всё ли сходится.\n\nОлег", folders: []string{"INBOX"}},
-		{id: "olg-4@example.org", inReplyTo: "olg-3@example.com", refs: []string{"olg-1@example.com", "olg-3@example.com"}, from: me, to: "Олег Ветров <oleg.vetrov@example.com>",
-			subject: "Re: Отчёт о походе и расходы", date: on(time.July, 14, 9, 2), plain: "Всё сходится, спасибо!\n\n> Свёл расходы в таблицу, посмотрите, всё ли сходится.", folders: []string{"Sent"}},
+		{id: "olg-1@example.com", from: "Oleg Vetrov <oleg.vetrov@example.com>", to: me, subject: "Hiking trip report and expenses", date: on(time.July, 12, 19, 5),
+			plain: "Hi! Posted the photos from the hike. I will total up the costs by the weekend.", folders: []string{"INBOX"}},
+		{id: "olg-2@example.org", inReplyTo: "olg-1@example.com", refs: []string{"olg-1@example.com"}, from: me, to: "Oleg Vetrov <oleg.vetrov@example.com>",
+			subject: "Re: Hiking trip report and expenses", date: on(time.July, 12, 21, 30), plain: "Great, looking forward to the spreadsheet.", folders: []string{"Sent"}},
+		{id: "olg-3@example.com", inReplyTo: "olg-2@example.org", refs: []string{"olg-1@example.com", "olg-2@example.org"}, from: "Oleg Vetrov <oleg.vetrov@example.com>", to: me,
+			subject: "Re: Hiking trip report and expenses", date: on(time.July, 14, 8, 15), plain: "Put the costs in a spreadsheet, please check it all adds up.\n\nOleg", folders: []string{"INBOX"}},
+		{id: "olg-4@example.org", inReplyTo: "olg-3@example.com", refs: []string{"olg-1@example.com", "olg-3@example.com"}, from: me, to: "Oleg Vetrov <oleg.vetrov@example.com>",
+			subject: "Re: Hiking trip report and expenses", date: on(time.July, 14, 9, 2), plain: "It all adds up, thanks!\n\n> Put the costs in a spreadsheet, please check it all adds up.", folders: []string{"Sent"}},
 
 		{id: "nl-4471@northline.example", from: "North Line Rail <tickets@northline.example>", to: mailAddress, subject: "Your tickets for 11 July", date: on(time.July, 2, 10, 0),
 			html: ticketsHTML, files: []sampleFile{{"tickets-NL-4471.pdf", "application/pdf", pdf("Tickets NL-4471", 41_000)}}, folders: []string{"INBOX", "Receipts"}},
 
-		{id: "val-1@example.com", from: "Marina Sokolova <marina.sokolova@example.com>", to: me, subject: "Fotos de Valencia", date: on(time.August, 31, 18, 20),
-			plain: "Te mando las originales, pesan bastante. Dime si llegan bien.\n\nMarina",
-			files: []sampleFile{{"valencia-playa.png", "image/png", photo(color.RGBA{0x3E, 0x7C, 0xB1, 0xFF}, color.RGBA{0xF2, 0xD7, 0x9E, 0xFF})},
-				{"valencia-mercado.png", "image/png", photo(color.RGBA{0xB1, 0x5E, 0x3E, 0xFF}, color.RGBA{0xF6, 0xE7, 0xC8, 0xFF})}}, folders: []string{"INBOX"}},
+		{id: "val-1@example.com", from: "Marina Sokolova <marina.sokolova@example.com>", to: me, subject: "Photos from Valencia", date: on(time.August, 31, 18, 20),
+			plain: "Here are the originals, they are quite big. Tell me if they arrive.\n\nMarina",
+			files: []sampleFile{{"valencia-beach.png", "image/png", photo(color.RGBA{0x3E, 0x7C, 0xB1, 0xFF}, color.RGBA{0xF2, 0xD7, 0x9E, 0xFF})},
+				{"valencia-market.png", "image/png", photo(color.RGBA{0xB1, 0x5E, 0x3E, 0xFF}, color.RGBA{0xF6, 0xE7, 0xC8, 0xFF})}}, folders: []string{"INBOX"}},
 		{id: "val-2@example.org", inReplyTo: "val-1@example.com", refs: []string{"val-1@example.com"}, from: me, to: "Marina Sokolova <marina.sokolova@example.com>",
-			subject: "Re: Fotos de Valencia", date: on(time.August, 31, 20, 2), plain: "¡Llegaron perfectas! Gracias.", folders: []string{"Sent"}},
+			subject: "Re: Photos from Valencia", date: on(time.August, 31, 20, 2), plain: "They arrived perfectly. Thank you!", folders: []string{"Sent"}},
 
 		{id: "cs-1@example.org", from: me, to: "Calle Sol Lettings <lettings@callesol.example>", subject: "Deposit for Calle Sol 14", date: on(time.September, 12, 9, 30),
 			plain: "Hello,\n\nI sent the deposit for Calle Sol 14 this morning. Could you confirm when it arrives?\n\nThanks", folders: []string{"Sent"}},
@@ -205,10 +205,10 @@ func seedMail(store *archive.Store) error {
 		{id: "hyc-renewal@harbour-yc.example", from: "Harbour Yacht Club <office@harbour-yc.example>", to: mailAddress, subject: "Membership renewal reminder", date: on(time.October, 1, 8, 0),
 			html: renewalHTML, folders: []string{"INBOX"}},
 
-		{id: "cena-1@example.org", from: me, to: "Pablo Ruiz <pablo.ruiz@example.com>", subject: "Cena el sábado", date: on(time.October, 3, 12, 10),
-			plain: "¿Os apetece cenar el sábado?", folders: []string{"Sent"}},
+		{id: "cena-1@example.org", from: me, to: "Pablo Ruiz <pablo.ruiz@example.com>", subject: "Dinner on Saturday", date: on(time.October, 3, 12, 10),
+			plain: "Dinner on Saturday, anyone?", folders: []string{"Sent"}},
 		{id: "cena-2@example.com", inReplyTo: "cena-1@example.org", refs: []string{"cena-1@example.org"}, from: "Pablo Ruiz <pablo.ruiz@example.com>", to: me,
-			subject: "Re: Cena el sábado", date: on(time.October, 3, 18, 2), plain: "¿A las nueve en casa? Yo llevo el postre y el vino.", folders: []string{"INBOX"}},
+			subject: "Re: Dinner on Saturday", date: on(time.October, 3, 18, 2), plain: "Nine at our place? We bring dessert and wine.", folders: []string{"INBOX"}},
 	}
 	own := func(address string) bool { return address == mailAddress }
 	next := map[string]uint32{}  // the next UID of each folder

@@ -41,8 +41,8 @@ func TestSeedWritesAMailbox(t *testing.T) {
 		return out
 	}
 	inbox := titles(archive.ThreadFilter{Role: model.FolderInbox})
-	want := []string{"Cena el sábado", "Membership renewal reminder", "Monday planning, room 4", "Deposit for Calle Sol 14",
-		"Fotos de Valencia", "Отчёт о походе и расходы", "Your tickets for 11 July"}
+	want := []string{"Dinner on Saturday", "Membership renewal reminder", "Monday planning, room 4", "Deposit for Calle Sol 14",
+		"Photos from Valencia", "Hiking trip report and expenses", "Your tickets for 11 July"}
 	if !slices.Equal(inbox, want) {
 		t.Errorf("inbox = %q", inbox)
 	}

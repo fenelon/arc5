@@ -37,7 +37,7 @@ func TestMailSearch(t *testing.T) {
 	has(t, frag, `<mark class="hit">projector</mark>`)
 	lacks(t, frag, "<html", `<nav class="folders"`)
 	empty := m.get(fmt.Sprintf("/s/%d/results?q=", m.box)).Body.String()
-	has(t, empty, `<h1 class="mail-head__title">Inbox</h1>`, "Cena el sábado")
+	has(t, empty, `<h1 class="mail-head__title">Inbox</h1>`, "Dinner on Saturday")
 }
 
 func TestChooseFolders(t *testing.T) {

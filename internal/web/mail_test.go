@@ -113,10 +113,10 @@ func TestMailInbox(t *testing.T) {
 		`<h1 class="mail-head__title">Inbox</h1>`, "With attachments", "Deleted at source",
 		// The rows of the mockup.
 		`<span class="mrow__name">Pablo Ruiz</span>`, "pablo.ruiz@example.com, and you", "2 messages", "3 Oct",
-		`<span class="mrow__subject">Cena el sábado</span>`, "¿A las nueve en casa? Yo llevo el postre y el vino.",
+		`<span class="mrow__subject">Dinner on Saturday</span>`, "Nine at our place? We bring dessert and wine.",
 		"Harbour Yacht Club", `<span class="tag tag--warn">Deleted at source</span>`,
 		"Dan Whitfield", "dan.whitfield@example.com, Priya Nair and you", "5 messages", `aria-label="Has attachment"`, "27 Sep",
-		`<span class="avatar mrow__avatar" aria-hidden="true">DW</span>`, "Олег Ветров", "14 Jul",
+		`<span class="avatar mrow__avatar" aria-hidden="true">DW</span>`, "Oleg Vetrov", "14 Jul",
 		fmt.Sprintf(`href="/s/%d/c/%d"`, m.box, m.thread("Monday planning, room 4")),
 		`placeholder="Search mail by word, sender, address or subject"`,
 		// The demo mailbox wears the mail logo in the picker.
@@ -137,16 +137,16 @@ func TestMailFolders(t *testing.T) {
 	t.Parallel()
 	m := newMailSite(t)
 	sent := m.page(fmt.Sprintf("/s/%d?folder=sent", m.box))
-	has(t, sent, `<h1 class="mail-head__title">Sent</h1>`, "Cena el sábado", "Deposit for Calle Sol 14")
+	has(t, sent, `<h1 class="mail-head__title">Sent</h1>`, "Dinner on Saturday", "Deposit for Calle Sol 14")
 	lacks(t, sent, "Membership renewal reminder", "Your tickets for 11 July")
 
 	receipts := m.page(fmt.Sprintf("/s/%d?folder=f%d", m.box, m.folder("Receipts")))
 	has(t, receipts, `<h1 class="mail-head__title">Receipts</h1>`, "Your tickets for 11 July", "Deposit for Calle Sol 14",
 		fmt.Sprintf(`<a class="folder folder--current" href="/s/%d?folder=f%d" aria-current="page">`, m.box, m.folder("Receipts")))
-	lacks(t, receipts, "Cena el sábado")
+	lacks(t, receipts, "Dinner on Saturday")
 
 	all := m.page(fmt.Sprintf("/s/%d?folder=all", m.box))
-	has(t, all, `<h1 class="mail-head__title">All mail</h1>`, "Cena el sábado", "Your tickets for 11 July")
+	has(t, all, `<h1 class="mail-head__title">All mail</h1>`, "Dinner on Saturday", "Your tickets for 11 July")
 
 	for _, bad := range []string{"f999999", "fnope", "trash", "f" + fmt.Sprint(m.folder("Trash"))} {
 		if rec := m.get(fmt.Sprintf("/s/%d?folder=%s", m.box, bad)); rec.Code != http.StatusNotFound {
@@ -164,13 +164,13 @@ func TestMailFilters(t *testing.T) {
 	t.Parallel()
 	m := newMailSite(t)
 	files := m.page(fmt.Sprintf("/s/%d?folder=inbox&files=1", m.box))
-	has(t, files, "Monday planning, room 4", "Fotos de Valencia", "Your tickets for 11 July",
+	has(t, files, "Monday planning, room 4", "Photos from Valencia", "Your tickets for 11 July",
 		fmt.Sprintf(`<a class="check check--on" role="checkbox" aria-checked="true" href="/s/%d?folder=inbox">`, m.box))
-	lacks(t, files, "Cena el sábado", "Membership renewal reminder")
+	lacks(t, files, "Dinner on Saturday", "Membership renewal reminder")
 
 	deleted := m.page(fmt.Sprintf("/s/%d?folder=inbox&deleted=1", m.box))
 	has(t, deleted, "Membership renewal reminder", "Monday planning, room 4")
-	lacks(t, deleted, "Cena el sábado")
+	lacks(t, deleted, "Dinner on Saturday")
 
 	inbox := m.page(fmt.Sprintf("/s/%d", m.box))
 	has(t, inbox, fmt.Sprintf(`<a class="check" role="checkbox" aria-checked="false" href="/s/%d?folder=inbox&amp;files=1">`, m.box))
@@ -199,7 +199,7 @@ func TestMailPaging(t *testing.T) {
 	}
 	has(t, first, fmt.Sprintf(`href="/s/%d?folder=inbox&amp;page=2">Older conversations</a>`, m.box), "Bulk 59")
 	second := m.page(fmt.Sprintf("/s/%d?folder=inbox&page=2", m.box))
-	has(t, second, "Bulk 09", "Cena el sábado", "Отчёт о походе и расходы")
+	has(t, second, "Bulk 09", "Dinner on Saturday", "Hiking trip report and expenses")
 	lacks(t, second, "Bulk 59", "Older conversations")
 }
 
@@ -207,8 +207,8 @@ func TestEverythingAtOnceMail(t *testing.T) {
 	t.Parallel()
 	m := newMailSite(t)
 	body := m.page("/s/mail")
-	has(t, body, `<div class="folders__name">Everything at once</div>`, `href="/s/mail?folder=sent"`, "Cena el sábado",
-		fmt.Sprintf(`href="/s/mail/c/%d"`, m.thread("Cena el sábado")))
+	has(t, body, `<div class="folders__name">Everything at once</div>`, `href="/s/mail?folder=sent"`, "Dinner on Saturday",
+		fmt.Sprintf(`href="/s/mail/c/%d"`, m.thread("Dinner on Saturday")))
 	lacks(t, body, "Receipts")
 	if rec := m.get("/s/mail?folder=f1"); rec.Code != http.StatusNotFound {
 		t.Errorf("a folder of one mailbox under everything: %d", rec.Code)

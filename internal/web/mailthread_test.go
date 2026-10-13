@@ -75,9 +75,9 @@ func TestWaitingFileCanBeFetched(t *testing.T) {
 func TestThreadFoldsQuotes(t *testing.T) {
 	t.Parallel()
 	m := newMailSite(t)
-	body := m.page(fmt.Sprintf("/s/%d/c/%d", m.box, m.thread("Отчёт о походе и расходы")))
-	has(t, body, "Всё сходится, спасибо!",
-		`<details class="quote"><summary>Show quoted text</summary>`, "&gt; Свёл расходы в таблицу")
+	body := m.page(fmt.Sprintf("/s/%d/c/%d", m.box, m.thread("Hiking trip report and expenses")))
+	has(t, body, "It all adds up, thanks!",
+		`<details class="quote"><summary>Show quoted text</summary>`, "&gt; Put the costs in a spreadsheet")
 	planning := m.page(fmt.Sprintf("/s/%d/c/%d", m.box, m.thread("Monday planning, room 4")))
 	// The owner's reply quotes Dan: the lead line goes with the quote.
 	has(t, planning, "Monday works. I can bring the projector if room 4 is free.")

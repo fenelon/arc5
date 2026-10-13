@@ -155,15 +155,15 @@ func Seed(store *archive.Store) (bool, error) {
 
 	for _, s := range []model.Sender{
 		{SourceID: "dan", DisplayName: "Dan Whitfield"}, {SourceID: "marina", DisplayName: "Marina Sokolova", Username: "marina_s"},
-		{SourceID: "pablo", DisplayName: "Pablo Ruiz"}, {SourceID: "oleg", DisplayName: "Олег Ветров"},
+		{SourceID: "pablo", DisplayName: "Pablo Ruiz"}, {SourceID: "oleg", DisplayName: "Oleg Vetrov"},
 	} {
 		b.do(store.UpsertSender(acc, s))
 	}
 	for _, c := range []model.Chat{
 		{SourceID: "dan", Kind: model.ChatPrivate, Title: "Dan Whitfield"},
 		{SourceID: "marina", Kind: model.ChatPrivate, Title: "Marina Sokolova"},
-		{SourceID: "familia", Kind: model.ChatGroup, Title: "Familia: Marina y Pablo"},
-		{SourceID: "hikes", Kind: model.ChatGroup, Title: "Походы 2026"},
+		{SourceID: "familia", Kind: model.ChatGroup, Title: "Family: Marina and Pablo"},
+		{SourceID: "hikes", Kind: model.ChatGroup, Title: "Hikes 2026"},
 		{SourceID: "saved", Kind: model.ChatPrivate, Title: "Saved Messages"},
 	} {
 		b.do(store.UpsertChat(acc, c))
@@ -223,12 +223,12 @@ func Seed(store *archive.Store) (bool, error) {
 	b.put(once)
 	b.say("dan", "", at(0, 19, 3), "Got her. Traffic is bad, we'll be there around eight.", true)
 
-	b.say("marina", "", at(2, 20, 15), "Долетела нормально?", true)
-	b.say("marina", "marina", at(2, 20, 31), "Спасибо, что встретил! Чемодан нашёлся, всё хорошо.", false)
-	b.say("familia", "marina", at(4, 20, 50), "¿Alguien ha visto mis llaves?", false)
-	b.say("familia", "pablo", at(4, 21, 14), "Dile a Marina que las llaves están en el buzón, por favor.", false)
-	b.say("hikes", "oleg", at(10, 7, 5), "Маршрут на субботу в закрепе. Встречаемся у причала в восемь.", false)
-	b.say("hikes", "", at(10, 7, 40), "Буду. Беру горелку и чай.", true)
+	b.say("marina", "", at(2, 20, 15), "Did you land all right?", true)
+	b.say("marina", "marina", at(2, 20, 31), "Thanks for picking me up! The suitcase turned up, all good.", false)
+	b.say("familia", "marina", at(4, 20, 50), "Has anyone seen my keys?", false)
+	b.say("familia", "pablo", at(4, 21, 14), "Tell Marina the keys are in the letterbox, please.", false)
+	b.say("hikes", "oleg", at(10, 7, 5), "The route for Saturday is pinned. We meet at the pier at eight.", false)
+	b.say("hikes", "", at(10, 7, 40), "I am in. Bringing the stove and tea.", true)
 	b.say("saved", "", at(25, 9, 0), "Passport renewal: form 11, two photos, old passport.", true)
 	if b.err != nil {
 		return true, b.err
