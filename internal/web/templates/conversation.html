@@ -5,17 +5,22 @@
 {{if .YearOptions}}<form class="jump only-phone" method="get" data-controller="jump"><label class="visually-hidden" for="jump-year">Jump to a year</label>{{if .Query}}<input type="hidden" name="q" value="{{.Query}}">{{end}}<select id="jump-year" name="date" data-action="jump#go">{{range .YearOptions}}<option value="{{.Value}}"{{if .Current}} selected{{end}}>{{.Label}}</option>{{end}}</select><button class="button button--quiet" type="submit" data-jump-target="button">Go</button></form>{{end}}
 </header>
 <div class="conv-body">
-<div class="messages" data-controller="scroll" data-scroll-to-value="{{.ScrollTo}}">
-{{if .OlderHref}}<a class="more" href="{{.OlderHref}}">Earlier messages</a>{{end}}
-{{range .Days}}<h2 class="day"><span>{{.Label}}</span></h2>
-{{range .Messages}}{{template "message" (dict "M" . "CSRF" $.CSRF "Back" $.Conversation.SelfHref)}}
-{{end}}{{else}}<p class="empty empty--center">Nothing has been archived in this chat yet.</p>
-{{end}}{{if .NewerHref}}<a class="more" href="{{.NewerHref}}">Later messages</a>{{end}}
-</div>
-{{if .Years}}<nav class="rail" aria-label="Jump to a quarter">
+<div class="messages" data-controller="scroll pager" data-scroll-to-value="{{.ScrollTo}}">
+{{template "messages-page" $}}</div>
+{{if .Years}}<nav class="rail" aria-label="Jump to a quarter" data-controller="rail">
 {{range .Years}}<div class="rail__year{{if .Now}} rail__year--now{{end}}"><span class="rail__label">{{.Label}}</span>{{range .Bands}}<a class="band{{if .Level}} band--{{.Level}}{{end}}{{if .Now}} band--now{{end}}" href="{{.Href}}" aria-label="{{.Label}}" title="{{.Label}}"></a>{{end}}</div>
 {{end}}</nav>{{end}}
 </div>
+{{end}}{{end}}
+
+{{/* messages-page is one page of a conversation's messages, between its
+links to the pages before and after: the whole of the messages column, or
+what the pager loads in place. */}}
+{{define "messages-page"}}{{with .Conversation}}{{if .OlderHref}}<a class="more" href="{{.OlderHref}}" data-pager-target="older">Earlier messages</a>{{end}}
+{{range .Days}}<h2 class="day" data-day="{{.Key}}"><span>{{.Label}}</span></h2>
+{{range .Messages}}{{template "message" (dict "M" . "CSRF" $.CSRF "Back" $.Conversation.SelfHref)}}
+{{end}}{{else}}<p class="empty empty--center">Nothing has been archived in this chat yet.</p>
+{{end}}{{if .NewerHref}}<a class="more" href="{{.NewerHref}}" data-pager-target="newer">Later messages</a>{{end}}
 {{end}}{{end}}
 
 {{define "message"}}{{$m := .M}}{{if $m.Service}}<p class="service" id="{{$m.Anchor}}">{{$m.Text}}</p>{{else}}<article class="msg{{if $m.Outgoing}} msg--out{{end}}{{if $m.Target}} msg--target{{end}}" id="{{$m.Anchor}}">

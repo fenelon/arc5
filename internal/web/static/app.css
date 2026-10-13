@@ -240,6 +240,7 @@ svg{display:block}
 .filters__actions a{font-weight:600;color:var(--accent)}
 mark.hit{padding:0 2px;color:var(--hit-ink);background:var(--hit);border-radius:3px}
 .msg--target:has(mark.hit){border-color:var(--hit)}
+.more[aria-busy]{color:var(--muted);cursor:progress}
 .more-link{display:block;padding:14px 16px;font-weight:600;color:var(--accent)}
 
 /* Sources page: tiles, then the chosen source's panel. */
