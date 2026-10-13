@@ -65,6 +65,7 @@ type Server struct {
 	static  fs.FS
 	version string
 	mux     *http.ServeMux
+	flows   flows // logins in progress on the Sources page
 }
 
 func New(deps Deps) (*Server, error) {
@@ -112,7 +113,12 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /s/{source}/c/{chat}", s.signedIn(s.conversationView))
 	s.mux.Handle("GET /s/{source}/results", s.signedIn(s.resultsFragment))
 	s.mux.Handle("GET /sources", s.signedIn(s.sourcesList))
+	s.mux.Handle("GET /sources/new", s.signedIn(s.newSourceForm))
+	s.mux.Handle("POST /sources/new", s.signedIn(s.addSource))
 	s.mux.Handle("GET /sources/{id}", s.signedIn(s.sourceSettings))
+	s.mux.Handle("GET /sources/{id}/login", s.signedIn(s.loginStep))
+	s.mux.Handle("POST /sources/{id}/login", s.signedIn(s.submitStep))
+	s.mux.Handle("POST /sources/{id}/login/cancel", s.signedIn(s.cancelLogin))
 	s.mux.Handle("POST /sources/{id}/name", s.signedIn(s.renameSource))
 	s.mux.Handle("POST /sources/{id}/settings", s.signedIn(s.saveSourceSettings))
 	s.mux.Handle("POST /sources/{id}/signout", s.signedIn(s.signOutSource))

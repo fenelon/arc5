@@ -45,6 +45,8 @@ type SourcePanel struct {
 	Progress            *ProgressView
 	Fields              []FieldView
 	CanSignOut          bool
+	LoginHref           string // "Log in again", when the source needs it
+	LoginLabel          string
 }
 
 type sourcesPage struct {
@@ -183,7 +185,14 @@ func (s *Server) panel(src source) (*SourcePanel, error) {
 	if !ok {
 		return p, nil
 	}
+	switch {
+	case src.State == stateNeedsLogin:
+		p.LoginHref, p.LoginLabel = fmt.Sprintf("/sources/%d/login", acc.ID), "Log in again"
+	case !acc.Enabled:
+		p.LoginHref, p.LoginLabel = fmt.Sprintf("/sources/%d/login", acc.ID), "Log in"
+	}
 	_, p.CanSignOut = c.(connector.SignOuter)
+	p.CanSignOut = p.CanSignOut && acc.Enabled && src.State != stateNeedsLogin
 	for _, f := range c.Settings() {
 		value, set := acc.Settings[f.Name]
 		if !set {

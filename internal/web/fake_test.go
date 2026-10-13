@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 
 	"github.com/fenelon/arc5/internal/connector"
 )
@@ -36,6 +37,14 @@ func (fakeConnector) SignOut(_ context.Context, state connector.State) error {
 type fakeFlow struct {
 	state connector.State
 	phone string
+}
+
+// fakeFlowsClosed counts fakeFlows closed, as a flow holding a connection would be.
+var fakeFlowsClosed atomic.Int64
+
+func (f *fakeFlow) Close() error {
+	fakeFlowsClosed.Add(1)
+	return nil
 }
 
 func (f *fakeFlow) Next(_ context.Context, input map[string]string) (connector.Step, error) {

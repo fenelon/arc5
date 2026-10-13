@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/fenelon/arc5/internal/archive"
 	"github.com/fenelon/arc5/internal/connector"
@@ -45,14 +46,15 @@ func (s *Server) sources() ([]source, error) {
 			src.Info = connector.Info{Name: acc.Connector, Title: acc.Connector, Display: connector.DisplayChats}
 		}
 		st, running := status[acc.ID]
-		describe(&src, st, running)
+		describe(&src, st, running, s.when)
 		out = append(out, src)
 	}
 	return out, nil
 }
 
 // describe turns the runner's status into a state mark and a sentence.
-func describe(src *source, st connector.Status, running bool) {
+// when formats the moment a state began, for "Needs login since 12:00".
+func describe(src *source, st connector.Status, running bool, when func(time.Time) string) {
 	set := func(state, label string) { src.State, src.StateLabel, src.Detail = state, label, label }
 	switch {
 	case !src.Account.RemovedAt.IsZero():
@@ -64,7 +66,11 @@ func describe(src *source, st connector.Status, running bool) {
 		set(stateOffline, "Not running")
 	case st.State == connector.StateNeedsLogin:
 		set(stateNeedsLogin, "Needs login")
+		if !st.Since.IsZero() {
+			src.Detail = "Needs login since " + when(st.Since)
+		}
 		src.Failing = true
+		return // the error only repeats that it needs login
 	case st.State == connector.StatePaused:
 		set(stateOffline, "Paused, the archive could not be written")
 		src.Failing = true
@@ -189,7 +195,11 @@ func (s *Server) chrome(r *http.Request, sess archive.Session, title string, all
 	p.Picker = picker
 	for _, src := range all {
 		if src.Failing {
-			p.Alert = &Alert{Name: src.Account.Label, Detail: src.Detail + ". New messages are not being saved, and ones that auto-delete cannot be recovered."}
+			p.Alert = &Alert{Name: src.Account.Label, Detail: src.Detail + ". New messages are not being saved, and ones that auto-delete cannot be recovered.",
+				ActionHref: "/sources/" + src.key(), ActionLabel: "Open sources"}
+			if src.State == stateNeedsLogin && src.Known {
+				p.Alert.ActionHref, p.Alert.ActionLabel = "/sources/"+src.key()+"/login", "Log in again"
+			}
 			break
 		}
 	}

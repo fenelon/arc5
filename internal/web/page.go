@@ -38,6 +38,8 @@ type Picker struct {
 
 // Alert names a source that is not archiving.
 type Alert struct {
-	Name   string
-	Detail string
+	Name        string
+	Detail      string
+	ActionHref  string // "Log in again" for a source that needs it, else the Sources page
+	ActionLabel string
 }

@@ -1,0 +1,39 @@
+{{define "add"}}{{template "head" .}}
+<body class="app">
+{{template "topbar" .}}
+{{template "banner" .}}
+<main class="plain plain--settings">
+<p><a class="panel__link" href="/sources">Back to sources</a></p>
+<h1>Add a source</h1>
+{{if .Choices}}<form class="card" method="post" action="/sources/new">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+{{if .Problem}}<p class="alert" role="alert">{{.Problem}}</p>{{end}}
+<fieldset class="kinds"><legend class="panel__label">What kind of account?</legend>
+{{range .Choices}}<label class="kind">{{template "logo" .Logo}}<input type="radio" name="connector" value="{{.Name}}"{{if .Checked}} checked{{end}}> <span>{{.Title}}</span></label>
+{{end}}</fieldset>
+<div class="field"><label for="source-name">Name, as the source picker shows it</label><input id="source-name" name="name" value="{{.Name}}" maxlength="100" placeholder="Personal" required></div>
+<button class="button" type="submit">Continue</button>
+</form>
+{{else}}<p>No kind of source is built into this copy of arc5 yet. Telegram arrives with the next release.</p>
+{{end}}</main>
+</body>
+</html>{{end}}
+
+{{define "login-step"}}{{template "head" .}}
+<body class="app">
+{{template "topbar" .}}
+<main class="plain plain--settings">
+<p><a class="panel__link" href="/sources/{{.AccountID}}">Back to {{.Name}}</a></p>
+<h1>Log in to {{.Name}}</h1>
+<form class="card" method="post" action="/sources/{{.AccountID}}/login">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+{{if .StepTitle}}<h2 class="card__title">{{.StepTitle}}</h2>{{end}}
+{{if .Help}}<p class="card__help">{{.Help}}</p>{{end}}
+{{if .Problem}}<p class="alert" role="alert">{{.Problem}}</p>{{end}}
+<div class="step-fields">{{range .Fields}}{{template "setting-field" .}}{{end}}</div>
+<button class="button" type="submit">Continue</button>
+</form>
+<form class="page-links" method="post" action="/sources/{{.AccountID}}/login/cancel"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link-button link-button--accent" type="submit">Cancel the login</button></form>
+</main>
+</body>
+</html>{{end}}
