@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gotd/td/tg"
+
 	"github.com/fenelon/arc5/internal/connector"
 	"github.com/fenelon/arc5/internal/model"
 )
@@ -143,8 +145,12 @@ func (c *Connector) Run(ctx context.Context, sink connector.Sink, state connecto
 		return r.fail(err)
 	}
 	defer r.conn.Close()
-	me, err := r.conn.Self(ctx)
-	if err != nil {
+	var me *tg.User
+	if err := r.call(ctx, func() error {
+		var err error
+		me, err = r.conn.Self(ctx)
+		return err
+	}); err != nil {
 		return r.fail(err)
 	}
 	if known, _ := loadSelf(state); known != 0 && known != me.ID {

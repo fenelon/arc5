@@ -46,8 +46,12 @@ func (r *run) syncChats(ctx context.Context) error {
 		seen   = map[string]bool{}
 	)
 	for range maxDialogPages {
-		page, err := r.conn.Dialogs(ctx, offset)
-		if err != nil {
+		var page dialogPage
+		if err := r.call(ctx, func() error {
+			var err error
+			page, err = r.conn.Dialogs(ctx, offset)
+			return err
+		}); err != nil {
 			return err
 		}
 		r.learn(page.Users, page.Chats)

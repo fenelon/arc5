@@ -173,3 +173,30 @@ func TestSettings(t *testing.T) {
 		t.Errorf("a bad date limits history: %+v", o)
 	}
 }
+
+// Review finding: a flood wait while reading the chat list failed the run,
+// and the runner retried within Telegram's wait.
+func TestTheChatListObeysFloodWaits(t *testing.T) {
+	list := chatList()
+	flooded := false
+	fc := &fakeConn{dialogs: func(offset dialogOffset) (dialogPage, error) {
+		if offset.ID != 0 && !flooded {
+			flooded = true
+			return dialogPage{}, tgerr.New(420, "FLOOD_WAIT_45")
+		}
+		return list(offset)
+	}}
+	sl := &sleeps{}
+	c := newTestConnector(&fakeDialer{conn: fc})
+	c.sleep = sl.sleep
+	sink := newMemSink()
+	stop := running(t, c, sink, signedIn(t), map[string]string{"paused": "true"})
+	eventually(t, "the whole chat list", func() bool { return sink.lastProgress().Phase == connector.PhaseLive })
+	stop()
+	if got := sl.all(); len(got) == 0 || got[0] != 45*time.Second {
+		t.Errorf("waits = %v", got)
+	}
+	if len(sink.chats) != 5 {
+		t.Errorf("chats = %v", sink.chats)
+	}
+}
