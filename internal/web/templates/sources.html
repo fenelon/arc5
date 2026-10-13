@@ -5,12 +5,13 @@
 <main class="plain plain--wide">
 <div class="page-head"><h1>Sources</h1><a class="button" href="/sources/new"><svg class="button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add a source</a></div>
 {{if eq .Saved "removed"}}<p class="saved" role="status">Removed. Its messages stay in the archive.</p>{{end}}
+<div id="source-tiles" data-controller="progress" data-progress-every-value="5000">
 {{range .Groups}}<h2 class="group-heading">{{.Title}}</h2>
 <div class="tiles">
 {{range .Tiles}}<a class="tile tile--wide{{if .Current}} tile--current{{end}}{{if .Warn}} tile--warn{{end}}" href="{{.Href}}"{{if .Current}} aria-current="true"{{end}}>{{template "logo" .Logo}}<span class="tile__text"><span class="tile__name">{{.Name}}</span><span class="tile__sub">{{.Detail}}</span></span>{{template "state" .}}</a>
 {{end}}</div>
 {{else}}<p class="empty">No sources yet.</p>
-{{end}}
+{{end}}</div>
 {{with .Panel}}{{template "source-panel" (dict "P" . "Page" $)}}{{end}}
 </main>
 </body>
@@ -33,7 +34,7 @@
 <p class="panel__help">Private chats and groups are archived as they appear. Channels and bots only when you switch them on.</p>
 <p><a class="panel__link" href="{{$p.ChatsHref}}">Choose which of the {{$p.Chats}} chats are archived</a></p>
 </div>
-<div class="panel__cell">
+<div class="panel__cell" id="source-state" data-controller="progress" data-progress-every-value="5000">
 <h3 class="panel__label">State</h3>
 {{if $p.Progress}}<div class="progress-line"><span>Catching up on history</span><span>{{$p.Progress.Done}} of {{$p.Progress.Total}} chats</span></div>
 <progress class="progress" max="{{$p.Progress.Total}}" value="{{$p.Progress.Done}}">{{$p.Progress.Done}} of {{$p.Progress.Total}} chats</progress>

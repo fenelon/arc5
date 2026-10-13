@@ -155,3 +155,17 @@ func TestRemoveSourceKeepsItsArchive(t *testing.T) {
 		}
 	}
 }
+
+// The tiles and the chosen source's state refresh themselves while the
+// Sources page is open.
+func TestSourcesPageKeepsItsStatesCurrent(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	s.fakeAccount("Personal")
+	has(t, s.page("/sources"),
+		`<div id="source-tiles" data-controller="progress" data-progress-every-value="5000">`,
+		`<div class="panel__cell" id="source-state" data-controller="progress" data-progress-every-value="5000">`)
+	if rec := s.get(s.srv.asset("js/progress_controller.js")); rec.Code != http.StatusOK {
+		t.Errorf("progress_controller.js: %d", rec.Code)
+	}
+}
