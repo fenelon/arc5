@@ -3,10 +3,8 @@
 {{template "topbar" .}}
 {{template "banner" .}}
 <div class="shell{{if .Conversation}} shell--open{{end}}">
-<aside class="list" aria-label="Chats">
-{{range .Chats}}<a class="row{{if .Current}} row--current{{end}}" href="{{.Href}}"{{if .Current}} aria-current="true"{{end}}><span class="avatar" aria-hidden="true">{{.Initials}}</span><span class="row__body"><span class="row__top"><span class="row__name">{{.Title}}</span><span class="row__when">{{.When}}</span></span><span class="row__preview">{{.Preview}}</span></span></a>
-{{else}}<p class="empty">Nothing has been archived here yet.</p>
-{{end}}{{if .MoreChatsHref}}<a class="more" href="{{.MoreChatsHref}}">Show more chats</a>{{end}}
+<aside class="list" id="list" aria-label="{{if .Results}}Search results{{else}}Chats{{end}}">
+{{template "list" .}}
 </aside>
 <section class="conversation" aria-label="Conversation">
 {{if .Conversation}}{{template "conversation" .}}{{else}}<p class="empty empty--center">Choose a chat on the left to read it.</p>{{end}}
@@ -14,3 +12,21 @@
 </div>
 </body>
 </html>{{end}}
+
+{{define "list"}}{{if .Results}}{{template "results" .Results}}{{else}}{{range .Chats}}<a class="row{{if .Current}} row--current{{end}}" href="{{.Href}}"{{if .Current}} aria-current="true"{{end}}><span class="avatar" aria-hidden="true">{{.Initials}}</span><span class="row__body"><span class="row__top"><span class="row__name">{{.Title}}</span><span class="row__when">{{.When}}</span></span><span class="row__preview">{{.Preview}}</span></span></a>
+{{else}}<p class="empty">Nothing has been archived here yet.</p>
+{{end}}{{if .MoreChatsHref}}<a class="more" href="{{.MoreChatsHref}}">Show more chats</a>{{end}}{{end}}{{end}}
+
+{{define "results"}}{{if .Person}}<div class="results__person"><h2 class="results__heading">Everything from {{.Person}}</h2><a class="results__back" href="{{.AllHref}}">All results</a></div>
+{{end}}{{if or .Chats .People}}<h2 class="results__heading">Chats and people</h2>
+{{range .Chats}}<a class="name-row" href="{{.Href}}"><span class="avatar" aria-hidden="true">{{.Initials}}</span><span class="row__body"><span class="row__name">{{template "pieces" .Title}}</span><span class="row__preview">{{.Detail}}</span></span></a>
+{{end}}{{range .People}}<a class="name-row" href="{{.Href}}"><span class="avatar avatar--person" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg></span><span class="row__body"><span class="row__name">{{template "pieces" .Name}}</span><span class="row__preview row__preview--accent">Everything from this person, in any chat</span></span></a>
+{{end}}{{end}}{{if .Hits}}{{if not .Person}}<h2 class="results__heading">Messages</h2>
+{{end}}{{range .Hits}}<a class="result{{if .Current}} result--current{{end}}" href="{{.Href}}"{{if .Current}} aria-current="true"{{end}}><span class="row__top"><span class="row__name">{{.Chat}}</span><span class="row__when">{{.When}}</span></span><span class="result__snippet">{{.Prefix}}{{template "pieces" .Snippet}}</span>{{range .Files}}<span class="result__file">File: {{template "pieces" .}}</span>{{end}}{{if .Deleted}}<span class="tag tag--warn">Deleted at source</span>{{end}}</a>
+{{end}}{{end}}{{if .Empty}}<p class="empty">Nothing matches “{{.Query}}”.</p>
+{{end}}{{if .Note}}<p class="results__note">{{.Note}}</p>
+{{end}}{{if .MoreHref}}<a class="more-link" href="{{.MoreHref}}">Show more messages</a>
+{{end}}{{if .FirstHref}}<a class="more-link" href="{{.FirstHref}}">First results</a>
+{{end}}{{end}}
+
+{{define "pieces"}}{{range .}}{{if .Mark}}<mark class="hit">{{.Text}}</mark>{{else}}{{.Text}}{{end}}{{end}}{{end}}

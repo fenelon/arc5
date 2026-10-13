@@ -135,7 +135,7 @@ func TestStaticFiles(t *testing.T) {
 		!strings.Contains(css.Header().Get("Cache-Control"), "immutable") || !strings.Contains(css.Body.String(), "--accent") {
 		t.Errorf("app.css: %d %v", css.Code, css.Header())
 	}
-	for _, name := range []string{"js/app.js", "js/stimulus.js", "js/theme_controller.js", "js/picker_controller.js",
+	for _, name := range []string{"js/app.js", "js/stimulus.js", "js/theme_controller.js", "js/picker_controller.js", "js/search_controller.js",
 		"fonts/geologica-latin-wght-normal.woff2", "fonts/geologica-cyrillic-wght-normal.woff2"} {
 		if rec := s.get(s.srv.asset(name)); rec.Code != http.StatusOK || rec.Body.Len() == 0 {
 			t.Errorf("%s: status %d, %d bytes", name, rec.Code, rec.Body.Len())

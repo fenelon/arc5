@@ -22,6 +22,7 @@ type Conversation struct {
 	OlderHref   string
 	NewerHref   string
 	ScrollTo    string // where the page opens: "end", "start" or a message's anchor
+	Query       string // the search the page was opened from, kept in its links
 	Days        []Day
 	Years       []RailYear
 	YearOptions []YearOption
@@ -40,6 +41,7 @@ type Message struct {
 	Sender        string
 	ForwardedFrom string
 	Text          string
+	Marked        []Piece // Text with the search's words marked, for the message opened from a search
 	Time          string
 	Edited        string // when it was last edited, or ""
 	Deleted       string // when the source deleted it, or ""
@@ -144,7 +146,7 @@ func plural(n int, one, many string) string {
 
 // rail builds the year rail from a chat's quarters, counted in the zone of
 // now. now is the moment the page is reading, which marks one band and one year.
-func rail(path string, quarters []archive.Quarter, now time.Time) ([]RailYear, []YearOption) {
+func rail(path, keep string, quarters []archive.Quarter, now time.Time) ([]RailYear, []YearOption) {
 	if len(quarters) == 0 {
 		return nil, nil
 	}
@@ -167,7 +169,7 @@ func rail(path string, quarters []archive.Quarter, now time.Time) ([]RailYear, [
 				level = max(1, (n*4+busiest-1)/busiest)
 			}
 			y.Bands = append(y.Bands, RailBand{
-				Href:  fmt.Sprintf("%s?date=%d-%02d-01", path, year, quarter*3-2),
+				Href:  fmt.Sprintf("%s?date=%d-%02d-01%s", path, year, quarter*3-2, keep),
 				Label: fmt.Sprintf("%s %d, %s", quarterNames[quarter-1], year, plural(n, "message", "messages")),
 				Level: level, Now: year == nowYear && quarter == nowQuarter,
 			})
@@ -248,7 +250,12 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 	}
 
 	path := fmt.Sprintf("/s/%s/c/%d", sel.Key, chatID)
+	q := searchQuery(r)
+	keep := keepQuery(q)
 	conv := &Conversation{Title: chat.Title, BackHref: "/s/" + sel.Key, SelfHref: r.URL.RequestURI()}
+	if keep != "" {
+		conv.Query, conv.BackHref = q, "/s/"+sel.Key+"?"+keep[1:]
+	}
 	conv.Subtitle = kindLabel(chat.Kind)
 	if service, known := s.serviceOf(chat.AccountID); known {
 		conv.Subtitle += " on " + service
@@ -272,13 +279,13 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 			}
 		}
 		if window.HasOlder {
-			conv.OlderHref = fmt.Sprintf("%s?before=%d", path, window.Messages[0].ID)
+			conv.OlderHref = fmt.Sprintf("%s?before=%d%s", path, window.Messages[0].ID, keep)
 		}
 		if window.HasNewer {
-			conv.NewerHref = fmt.Sprintf("%s?after=%d", path, window.Messages[len(window.Messages)-1].ID)
+			conv.NewerHref = fmt.Sprintf("%s?after=%d%s", path, window.Messages[len(window.Messages)-1].ID, keep)
 		}
 	}
-	conv.Years, conv.YearOptions = rail(path, quarters, reading.In(s.deps.Location))
+	conv.Years, conv.YearOptions = rail(path, keep, quarters, reading.In(s.deps.Location))
 
 	for _, m := range window.Messages {
 		sent := m.SentAt.In(s.deps.Location)
@@ -289,6 +296,9 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 		v := Message{
 			Anchor: fmt.Sprintf("m%d", m.ID), Service: m.Kind == model.KindService, Outgoing: m.Outgoing,
 			Target: m.ID == target, ForwardedFrom: m.ForwardedFrom, Text: m.Text, Time: sent.Format("15:04"),
+		}
+		if v.Target && keep != "" {
+			v.Marked = pieces(s.deps.Index.Searcher().Highlight(q, m.Text))
 		}
 		if !m.Outgoing && chat.Kind != model.ChatPrivate {
 			v.Sender = m.SenderName

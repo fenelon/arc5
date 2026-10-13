@@ -3,10 +3,11 @@ package web
 // Page is what every signed-in page shows around its own content.
 type Page struct {
 	Title  string
-	Theme  string  // "", "light" or "dark"; empty follows the device
-	CSRF   string  // the session's token, for forms
-	Picker *Picker // nil when there are no sources
-	Alert  *Alert  // nil when every source is archiving
+	Theme  string     // "", "light" or "dark"; empty follows the device
+	CSRF   string     // the session's token, for forms
+	Picker *Picker    // nil when there are no sources
+	Search *SearchBox // nil on pages without a search box
+	Alert  *Alert     // nil when every source is archiving
 }
 
 // Tile is one source, or "Everything at once", as the picker and the Sources

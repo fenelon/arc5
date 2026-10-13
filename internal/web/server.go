@@ -104,6 +104,7 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /{$}", s.signedIn(s.home))
 	s.mux.Handle("GET /s/{source}", s.signedIn(s.sourceView))
 	s.mux.Handle("GET /s/{source}/c/{chat}", s.signedIn(s.conversationView))
+	s.mux.Handle("GET /s/{source}/results", s.signedIn(s.resultsFragment))
 	s.mux.Handle("GET /sources", s.signedIn(s.sourcesList))
 	s.mux.Handle("GET /settings", s.signedIn(s.settings))
 	s.mux.Handle("POST /settings/appearance", s.signedIn(s.saveAppearance))

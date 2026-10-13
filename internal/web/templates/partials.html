@@ -30,9 +30,11 @@
 {{define "topbar"}}<header class="topbar">
 {{template "brand"}}
 {{if .Picker}}{{template "picker" .Picker}}{{end}}
-<span class="topbar__space"></span>
+{{if .Search}}{{template "search" .Search}}{{else}}<span class="topbar__space"></span>{{end}}
 <button class="icon-button not-phone" type="button" data-controller="theme" data-action="theme#toggle" aria-label="Switch between the light and dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/></svg></button>
 <a class="settings-link" href="/settings"><svg class="only-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="settings-link__label">Settings</span></a>
 </header>{{end}}
 
 {{define "banner"}}{{if .Alert}}<div class="banner" role="alert"><span><strong>{{.Alert.Name}} is not archiving.</strong> {{.Alert.Detail}}</span><a class="button button--warn" href="/sources">Open sources</a></div>{{end}}{{end}}
+
+{{define "search"}}<form class="search" role="search" method="get" action="{{.Action}}" data-controller="search" data-search-results-value="{{.Results}}" data-action="submit->search#submit"><svg class="search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input class="search__input" type="search" name="q" value="{{.Query}}" placeholder="Search messages, chats and people" aria-label="Search messages, chats and people" autocomplete="off" data-search-target="input" data-action="input->search#type keydown.esc->search#clear"></form>{{end}}
