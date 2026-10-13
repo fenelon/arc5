@@ -44,6 +44,10 @@ type Sink interface {
 	// They are downloaded regardless of the size cap. A ref may be delivered
 	// more than once.
 	RequestedMedia() <-chan model.AttachmentRef
+	// PendingMedia lists attachments still waiting to be downloaded that
+	// nobody asked for by hand, so a connector can queue them again after a
+	// restart.
+	PendingMedia() ([]model.AttachmentRef, error)
 	ReportProgress(Progress)
 	// AvatarStored reports whether a chat's or sender's picture with this
 	// identity is already kept, so only new pictures are downloaded.

@@ -255,3 +255,25 @@ func TestStoredAttachmentCannotBeDowngraded(t *testing.T) {
 		t.Fatalf("attachment = %+v; want it still stored", got)
 	}
 }
+
+func TestPendingMediaListsWhatARestartMustRequeue(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	waiting := withAttachment(t, s, acc, "1", 10)
+	stored := withAttachment(t, s, acc, "2", 10)
+	if err := s.PutMedia(acc, stored, strings.NewReader("x")); err != nil {
+		t.Fatal(err)
+	}
+	asked := withAttachment(t, s, acc, "3", 10)
+	if _, _, err := s.RequestMedia(attachment(t, s, acc, "3").ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.PendingMedia(acc)
+	if err != nil || len(got) != 1 || got[0].MessageSourceID != waiting.MessageSourceID {
+		t.Errorf("PendingMedia = %+v, %v; want only the file nobody asked for", got, err)
+	}
+	_ = asked
+	if other, _ := s.PendingMedia(acc + 1); len(other) != 0 {
+		t.Errorf("another account's pending media = %v", other)
+	}
+}

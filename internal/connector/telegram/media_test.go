@@ -281,3 +281,27 @@ func TestAStaleDownloadIsDropped(t *testing.T) {
 		t.Errorf("statuses = %v; a stale ref must not mark anything", sink.statuses)
 	}
 }
+
+// Review finding: downloads queued in memory were forgotten by a restart,
+// leaving files waiting for ever.
+func TestARestartRequeuesWaitingFiles(t *testing.T) {
+	dl := &downloads{}
+	sink := newMemSink()
+	if err := sink.UpsertChat(model.Chat{SourceID: "user:1", Kind: model.ChatPrivate, Title: "Dan"}); err != nil {
+		t.Fatal(err)
+	}
+	// Stored by an earlier run that stopped before the download.
+	if _, err := sink.UpsertMessage(model.Message{ChatSourceID: "user:1", SourceID: "7", SentAt: day0,
+		Attachments: []model.Attachment{{Kind: model.AttachPhoto, Size: 10, SourceID: "photo:707"}}}); err != nil {
+		t.Fatal(err)
+	}
+	fc := &fakeConn{dialogs: chatList(), download: dl.download, messages: func(_ tg.InputPeerClass, ids []int) (historyPage, error) {
+		return historyPage{Messages: []tg.MessageClass{photoMessage(ids[0], 707, 4)}}, nil
+	}}
+	c := newTestConnector(&fakeDialer{conn: fc})
+	c.sleep = (&sleeps{}).sleep
+	stop := running(t, c, sink, signedIn(t), nil)
+	defer stop()
+	ref := model.AttachmentRef{ChatSourceID: "user:1", MessageSourceID: "7"}
+	eventually(t, "the waiting file", func() bool { sink.mu.Lock(); defer sink.mu.Unlock(); return sink.media[ref] != nil })
+}

@@ -22,8 +22,9 @@ const mediaTries = 3
 // download is an attachment to fetch. A nil Location means the message has
 // to be fetched again first, as for a file the owner asked for.
 type download struct {
-	ref  model.AttachmentRef
-	item mediaItem
+	ref   model.AttachmentRef
+	item  mediaItem
+	paced bool // waits its turn like the backfill
 }
 
 // avatarJob is a picture to fetch, and the chats and senders it belongs to:
@@ -151,7 +152,7 @@ func (r *run) mediaWorker(ctx context.Context) error {
 // fetch downloads one attachment, refreshing its file reference once if
 // Telegram says it expired, and trying three times in all.
 func (r *run) fetch(ctx context.Context, d download) error {
-	backfill := false
+	backfill := d.paced || (d.item.Location != nil && !d.item.live)
 	if d.item.Location == nil {
 		item, found, err := r.refresh(ctx, d.ref)
 		if err != nil {
@@ -161,8 +162,6 @@ func (r *run) fetch(ctx context.Context, d download) error {
 			return r.sink.SetAttachmentStatus(d.ref, model.StatusUnavailable, "Telegram no longer has this message")
 		}
 		d.item = item
-	} else {
-		backfill = !d.item.live
 	}
 	refreshed := false
 	var last error
@@ -267,6 +266,24 @@ func (r *run) refresh(ctx context.Context, ref model.AttachmentRef) (mediaItem, 
 		}
 	}
 	return mediaItem{}, false, nil
+}
+
+// requeuePending queues again the files an earlier run stored messages for
+// but did not download, paced like the backfill. Each message is fetched
+// again for a fresh file location.
+func (r *run) requeuePending() error {
+	refs, err := r.sink.PendingMedia()
+	if err != nil {
+		return err
+	}
+	q := r.queue()
+	q.mu.Lock()
+	for _, ref := range refs {
+		q.backfill = append(q.backfill, download{ref: ref, paced: true})
+	}
+	q.mu.Unlock()
+	q.signal()
+	return nil
 }
 
 // queueAvatar asks for a chat's or sender's picture if it is not kept yet.

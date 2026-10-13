@@ -274,6 +274,21 @@ func (s *memSink) ChatArchived(chat string) (bool, error) {
 
 func (s *memSink) RequestedMedia() <-chan model.AttachmentRef { return s.requests }
 
+func (s *memSink) PendingMedia() ([]model.AttachmentRef, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []model.AttachmentRef
+	for _, m := range s.messages {
+		for i, a := range m.Attachments {
+			ref := model.AttachmentRef{ChatSourceID: m.ChatSourceID, MessageSourceID: m.SourceID, Position: i}
+			if !a.NoFetch && s.media[ref] == nil && s.statuses[ref] == "" {
+				out = append(out, ref)
+			}
+		}
+	}
+	return out, nil
+}
+
 func (s *memSink) ReportProgress(p connector.Progress) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

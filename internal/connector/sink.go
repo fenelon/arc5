@@ -75,6 +75,11 @@ func (s *accountSink) ChatArchived(chatSourceID string) (bool, error) {
 
 func (s *accountSink) RequestedMedia() <-chan model.AttachmentRef { return s.requests }
 
+func (s *accountSink) PendingMedia() ([]model.AttachmentRef, error) {
+	refs, err := s.store.PendingMedia(s.accountID)
+	return refs, classify(err)
+}
+
 func (s *accountSink) ReportProgress(p Progress) { s.progress(p) }
 
 func (s *accountSink) AvatarStored(ref model.AvatarRef) (bool, error) {
