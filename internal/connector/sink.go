@@ -76,6 +76,11 @@ func (s *accountSink) RequestedMedia() <-chan model.AttachmentRef { return s.req
 
 func (s *accountSink) ReportProgress(p Progress) { s.progress(p) }
 
+// NewState returns an account's state, for a setup flow run outside the runner.
+func NewState(store *archive.Store, accountID int64) State {
+	return accountState{store: store, accountID: accountID}
+}
+
 // accountState binds connector_state to one account.
 type accountState struct {
 	store     *archive.Store

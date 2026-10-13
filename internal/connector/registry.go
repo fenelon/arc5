@@ -18,6 +18,7 @@ type Info struct {
 	Name    string // stored on each account, such as "telegram"
 	Title   string // shown to the owner, such as "Telegram"
 	Display Display
+	Hidden  bool // not offered when the owner adds a source, such as the demo
 }
 
 // Factory builds a fresh connector for one run.
@@ -84,4 +85,16 @@ func (r *Registry) Names() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// Infos describes every registered connector, sorted by title.
+func (r *Registry) Infos() []Info {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]Info, 0, len(r.entries))
+	for _, e := range r.entries {
+		out = append(out, e.info)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Title < out[j].Title })
+	return out
 }

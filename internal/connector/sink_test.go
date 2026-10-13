@@ -117,3 +117,17 @@ func TestStateIsBoundToItsAccount(t *testing.T) {
 		t.Fatalf("b.Get = %q, %v; want nil", v, err)
 	}
 }
+
+func TestNewStateIsTheAccountsState(t *testing.T) {
+	store := openStore(t)
+	acc := newAccount(t, store)
+	if err := NewState(store, acc).Set("session", []byte("abc")); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := store.StateGet(acc, "session"); string(v) != "abc" {
+		t.Fatalf("stored state = %q", v)
+	}
+	if v, _ := NewState(store, acc).Get("session"); string(v) != "abc" {
+		t.Fatalf("read back = %q", v)
+	}
+}

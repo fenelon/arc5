@@ -57,8 +57,23 @@ type State interface {
 // SetupFlow walks the owner through connecting an account.
 type SetupFlow interface {
 	// Next submits the previous step's input (nil for the first call) and
-	// returns the next step. A step with Done set ends the flow.
+	// returns the next step. A step with Done set ends the flow. An error
+	// means the input was not accepted: the flow stays on the step it was
+	// on, and the interface shows the error's text and asks again, so the
+	// text should say what to do. ctx ends with the request that submitted
+	// the step. A flow that holds something open between steps, such as a
+	// connection, implements io.Closer: the interface closes it when the flow
+	// ends, is cancelled, or is left unfinished for 30 minutes.
 	Next(ctx context.Context, input map[string]string) (Step, error)
+}
+
+// SignOuter is implemented by connectors that can end their session at the
+// source, such as logging out of Telegram. The interface offers to sign a
+// source out only when its connector implements it. The runner stops the
+// connector first and starts it again afterwards, when it should report
+// ErrNeedsLogin.
+type SignOuter interface {
+	SignOut(ctx context.Context, state State) error
 }
 
 type Step struct {
@@ -75,6 +90,7 @@ const (
 	FieldSecret FieldKind = "secret"
 	FieldNumber FieldKind = "number"
 	FieldChoice FieldKind = "choice"
+	FieldBool   FieldKind = "bool" // a checkbox; its value is "true" when ticked and "" when not
 )
 
 type Field struct {
@@ -109,4 +125,7 @@ var (
 	ErrNeedsLogin = errors.New("account needs login")
 	// ErrStorage wraps archive failures a connector cannot fix, such as a full disk.
 	ErrStorage = errors.New("archive storage failed")
+	// ErrCannotSignOut is returned by Runner.SignOut for a connector that
+	// does not implement SignOuter.
+	ErrCannotSignOut = errors.New("this kind of source cannot be signed out")
 )

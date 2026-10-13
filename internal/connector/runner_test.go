@@ -491,3 +491,59 @@ func TestRunnerLogsFailuresWithPanicStack(t *testing.T) {
 		}
 	}
 }
+
+// signingOut is a connector that can end its session: SignOut records it in
+// state, and Run then reports that it needs login.
+type signingOut struct{ stubConnector }
+
+func (signingOut) SignOut(_ context.Context, state State) error {
+	return state.Set("signed_out", []byte("1"))
+}
+
+func TestSignOutEndsTheSessionAndRestarts(t *testing.T) {
+	store := openStore(t)
+	acc := newAccount(t, store)
+	reg := NewRegistry()
+	run := func(ctx context.Context, _ Sink, state State, _ map[string]string) error {
+		if v, _ := state.Get("signed_out"); len(v) > 0 {
+			return ErrNeedsLogin
+		}
+		return blockUntilCancelled(ctx)
+	}
+	reg.Register(stubInfo("stub"), func() Connector { return signingOut{stubConnector{run: run}} })
+	r := NewRunner(store, reg)
+	r.Logf = func(string, ...any) {}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() { cancel(); r.Wait() })
+	if err := r.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the connector to run", func() bool { return statusOf(r, acc).State == StateRunning })
+
+	if err := r.SignOut(ctx, acc); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the connector to need login", func() bool { return statusOf(r, acc).State == StateNeedsLogin })
+	if v, _ := store.StateGet(acc, "signed_out"); string(v) != "1" {
+		t.Errorf("SignOut did not get the account's state: %q", v)
+	}
+	if err := r.SignOut(ctx, 9999); !errors.Is(err, archive.ErrNotFound) {
+		t.Errorf("unknown account: %v, want ErrNotFound", err)
+	}
+}
+
+func TestSignOutNeedsAConnectorThatCan(t *testing.T) {
+	r, _, acc, ctx := newTestRunner(t, func(ctx context.Context, _ Sink, _ State, _ map[string]string) error {
+		return blockUntilCancelled(ctx)
+	})
+	if err := r.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the connector to run", func() bool { return statusOf(r, acc).State == StateRunning })
+	if err := r.SignOut(ctx, acc); !errors.Is(err, ErrCannotSignOut) {
+		t.Fatalf("SignOut on a connector without it = %v, want ErrCannotSignOut", err)
+	}
+	if st := statusOf(r, acc).State; st != StateRunning {
+		t.Errorf("the connector was disturbed: %s", st)
+	}
+}

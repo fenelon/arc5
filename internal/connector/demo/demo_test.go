@@ -2,6 +2,7 @@ package demo
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -98,7 +99,7 @@ func TestDemoConnectorReportsLiveAndStopsWhenCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	sink := &progressSink{reported: make(chan connector.Progress, 1)}
 	done := make(chan error, 1)
-	go func() { done <- c.Run(ctx, sink, nil, nil) }()
+	go func() { done <- c.Run(ctx, sink, memState{}, nil) }()
 	select {
 	case p := <-sink.reported:
 		if p.Phase != connector.PhaseLive {
@@ -124,3 +125,62 @@ type progressSink struct {
 }
 
 func (s *progressSink) ReportProgress(p connector.Progress) { s.reported <- p }
+
+// memState is a connector.State in memory.
+type memState map[string][]byte
+
+func (m memState) Get(key string) ([]byte, error)     { return m[key], nil }
+func (m memState) Set(key string, value []byte) error { m[key] = value; return nil }
+
+func TestDemoIsHiddenButHasSettingsAndALogin(t *testing.T) {
+	reg := connector.NewRegistry()
+	Register(reg)
+	info, _ := reg.Info(Name)
+	if !info.Hidden {
+		t.Error("the demo connector is offered as a source to add")
+	}
+	c, _ := reg.New(Name)
+	if len(c.Settings()) == 0 {
+		t.Error("the demo connector has no settings to show")
+	}
+	if _, ok := c.(connector.SignOuter); !ok {
+		t.Fatal("the demo connector cannot be signed out")
+	}
+
+	state := memState{}
+	if err := c.(connector.SignOuter).SignOut(context.Background(), state); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sink := &progressSink{reported: make(chan connector.Progress, 1)}
+	if err := c.Run(ctx, sink, state, nil); !errors.Is(err, connector.ErrNeedsLogin) {
+		t.Fatalf("Run after signing out = %v, want ErrNeedsLogin", err)
+	}
+
+	flow := c.Setup(state)
+	step, err := flow.Next(ctx, nil)
+	if err != nil || step.Done || len(step.Fields) != 1 || step.Fields[0].Name != "code" {
+		t.Fatalf("first step = %+v, %v", step, err)
+	}
+	if _, err := flow.Next(ctx, map[string]string{"code": "99999"}); err == nil {
+		t.Fatal("a wrong code was accepted")
+	}
+	step, err = flow.Next(ctx, map[string]string{"code": " 12345 "})
+	if err != nil || !step.Done {
+		t.Fatalf("after the right code: %+v, %v", step, err)
+	}
+	runCtx, stop := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { done <- c.Run(runCtx, sink, state, nil) }()
+	select {
+	case p := <-sink.reported:
+		if p.Phase != connector.PhaseLive {
+			t.Errorf("after logging in again: %+v", p)
+		}
+	case err := <-done:
+		t.Fatalf("Run after logging in again returned %v", err)
+	}
+	stop()
+	<-done
+}

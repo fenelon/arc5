@@ -63,3 +63,17 @@ func TestRegisterRejectsBadInfo(t *testing.T) {
 		})
 	}
 }
+
+func TestInfosListsEveryConnectorByTitle(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(Info{Name: "zeta", Title: "Zeta", Display: DisplayChats}, func() Connector { return stubConnector{} })
+	reg.Register(Info{Name: "alpha", Title: "Mail", Display: DisplayMail}, func() Connector { return stubConnector{} })
+	reg.Register(Info{Name: "demo", Title: "Demo", Display: DisplayChats, Hidden: true}, func() Connector { return stubConnector{} })
+	var titles []string
+	for _, info := range reg.Infos() {
+		titles = append(titles, info.Title)
+	}
+	if want := []string{"Demo", "Mail", "Zeta"}; !slices.Equal(titles, want) {
+		t.Fatalf("Infos titles = %v, want %v", titles, want)
+	}
+}
