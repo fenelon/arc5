@@ -1,10 +1,10 @@
 import { Controller } from "./stimulus.js"
 
-// Scrolls a long year rail to the quarter being read, which is usually the
+// Scrolls a long year rail to the week being read, which is usually the
 // newest, at the bottom.
 export default class extends Controller {
   connect() {
-    const band = this.element.querySelector(".band--now")
+    const band = this.element.querySelector(".week--now") || this.element.querySelector(".month--now")
     if (!band) {
       this.element.scrollTop = this.element.scrollHeight
       return

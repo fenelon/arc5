@@ -368,38 +368,50 @@ func (s *Store) attach(messages []MessageView) error {
 	return rows.Err()
 }
 
-// Quarter is how many messages a chat holds in one quarter of a year.
-type Quarter struct {
+// Month is how many messages a chat holds in one month.
+type Month struct {
 	Year     int
-	Quarter  int // 1 to 4
+	Month    time.Month
 	Messages int
 }
 
-// ChatQuarters counts a chat's messages by quarter of the year in loc, the
-// time zone the reader sees dates in, newest first. Quarters with no
-// messages are not returned. Each quarter is counted over a range of the
-// (chat, time) index, so this stays quick on long chats.
-func (s *Store) ChatQuarters(chatID int64, loc *time.Location) ([]Quarter, error) {
+// ChatMonths counts a chat's messages by month in loc, the time zone the
+// reader sees dates in, newest first. Months with no messages are left out.
+func (s *Store) ChatMonths(chatID int64, loc *time.Location) ([]Month, error) {
 	var first, last sql.NullInt64
 	if err := s.r.QueryRow(`SELECT MIN(sent_at), MAX(sent_at) FROM messages WHERE chat_id = ?`, chatID).
 		Scan(&first, &last); err != nil || !first.Valid {
 		return nil, err
 	}
-	quarterOf := func(unix int64) time.Time {
+	monthOf := func(unix int64) time.Time {
 		t := time.Unix(unix, 0).In(loc)
-		return time.Date(t.Year(), (t.Month()-1)/3*3+1, 1, 0, 0, 0, 0, loc)
+		return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, loc)
 	}
-	oldest := quarterOf(first.Int64)
-	var out []Quarter
-	for start := quarterOf(last.Int64); !start.Before(oldest); start = start.AddDate(0, -3, 0) {
-		var n int
-		if err := s.r.QueryRow(`SELECT COUNT(*) FROM messages WHERE chat_id = ? AND sent_at >= ? AND sent_at < ?`,
-			chatID, start.Unix(), start.AddDate(0, 3, 0).Unix()).Scan(&n); err != nil {
+	oldest := monthOf(first.Int64)
+	var out []Month
+	for start := monthOf(last.Int64); !start.Before(oldest); start = start.AddDate(0, -1, 0) {
+		counts, err := s.ChatCounts(chatID, []time.Time{start, start.AddDate(0, 1, 0)})
+		if err != nil {
 			return nil, err
 		}
-		if n > 0 {
-			out = append(out, Quarter{Year: start.Year(), Quarter: int(start.Month()-1)/3 + 1, Messages: n})
+		if counts[0] > 0 {
+			out = append(out, Month{Year: start.Year(), Month: start.Month(), Messages: counts[0]})
 		}
+	}
+	return out, nil
+}
+
+// ChatCounts counts a chat's messages between consecutive moments: from
+// bounds[i], inclusive, to bounds[i+1].
+func (s *Store) ChatCounts(chatID int64, bounds []time.Time) ([]int, error) {
+	var out []int
+	for i := 0; i+1 < len(bounds); i++ {
+		var n int
+		if err := s.r.QueryRow(`SELECT COUNT(*) FROM messages WHERE chat_id = ? AND sent_at >= ? AND sent_at < ?`,
+			chatID, bounds[i].Unix(), bounds[i+1].Unix()).Scan(&n); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
 	}
 	return out, nil
 }

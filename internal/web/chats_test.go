@@ -151,7 +151,7 @@ func TestChatListGrows(t *testing.T) {
 	has(t, all, fmt.Sprintf(`href="%s"`, open))
 	chat := s.page(open)
 	has(t, chat, `class="row row--current" href="`+strings.ReplaceAll(open, "&", "&amp;")+`"`, "chat-000", "chat-100",
-		fmt.Sprintf(`href="/s/%d/c/%d?date=2026-07-01&amp;chats=200"`, acc, oldest))
+		fmt.Sprintf(`href="/s/%d/c/%d?date=2026-09-01&amp;chats=200"`, acc, oldest))
 	lacks(t, chat, "Show more chats")
 	// The first page's rows need no count.
 	has(t, first, fmt.Sprintf(`href="/s/%d/c/%d"`, acc, s.chatID(acc, "chat-100")))

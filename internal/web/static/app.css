@@ -186,11 +186,24 @@ svg{display:block}
 .file form{margin:0}
 
 /* Year rail: four bands per year, newest at the top. */
-.rail{display:flex;flex-direction:column;gap:10px;flex-shrink:0;width:76px;padding:16px 12px;background:var(--pane);border-left:1px solid var(--line);overflow-y:auto}
-.rail__year{display:flex;flex-direction:column;gap:3px}
+.rail{display:flex;flex-direction:column;gap:12px;flex-shrink:0;width:92px;padding:16px 10px;background:var(--pane);border-left:1px solid var(--line);overflow-y:auto}
+.rail__year{display:flex;flex-direction:column;gap:2px}
+.month,.week{display:flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;border-radius:3px}
+.month{min-height:14px}
+.month__name{flex-shrink:0;width:24px;font-size:10.5px;line-height:1}
+.month .band,.week .band{flex:1 1 auto}
+.month:hover .band,.week:hover .band{box-shadow:0 0 0 1px var(--accent)}
+.month:hover,.week:hover{color:var(--ink)}
+.month--now .month__name{font-weight:700;color:var(--accent)}
+.weeks{display:flex;flex-direction:column;gap:2px;margin:2px 0 4px 6px;padding-left:6px;border-left:2px solid var(--line)}
+.week{min-height:12px}
+.week__day{flex-shrink:0;width:14px;font-size:10px;line-height:1;text-align:right}
+.week .band{height:6px}
+.week--now .week__day{font-weight:700;color:var(--accent)}
+.week--now .band{background:var(--band-now)}
 .rail__label{font-size:13px;font-weight:500;color:var(--muted)}
 .rail__year--now .rail__label{font-weight:700;color:var(--ink)}
-.band{display:block;height:9px;border-radius:2px;background:var(--band-0)}
+.band{display:block;height:8px;border-radius:2px;background:var(--band-0)}
 .band--1{background:var(--band-1)}
 .band--2{background:var(--band-2)}
 .band--3{background:var(--band-3)}
