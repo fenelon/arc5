@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -374,6 +375,59 @@ func TestDeletionRightAfterNewMail(t *testing.T) {
 	}
 	if a.deleted(t, "b@x") {
 		t.Error("the new mail is marked deleted")
+	}
+}
+
+// A message the server will not hand over is tried a few times, then kept
+// as a note saying so, and the rest of the folder is still archived.
+func TestAMessageTheServerRefusesDoesNotBlockTheRest(t *testing.T) {
+	a := newArchived(t)
+	srv := newFakeServer("INBOX")
+	srv.add("INBOX", msg("one@x", "a@example.com", "One", "one"), now.Add(-3*time.Hour))
+	srv.add("INBOX", msg("two@x", "a@example.com", "Two", "two"), now.Add(-2*time.Hour))
+	srv.add("INBOX", msg("three@x", "a@example.com", "Three", "three"), now.Add(-time.Hour))
+	srv.refuseFetch = map[string]bool{"INBOX/2": true}
+	cl, _ := srv.dial(context.Background(), account{Password: "app-password"})
+	c := &Connector{dial: srv.dial, now: func() time.Time { return now }, sleep: func(ctx context.Context, _ time.Duration) error { return ctx.Err() }, slice: time.Hour}
+	r := &run{c: c, cl: cl, sink: a.sink, state: newMemState(), o: options{own: map[string]bool{}}}
+	ctx := context.Background()
+	for i := 0; i < maxAttempts+1; i++ {
+		r.cycle(ctx) // errors while the message is retried end a cycle; that is expected
+	}
+	for _, id := range []string{"one@x", "three@x"} {
+		if _, err := a.store.Message(a.acc, "thread:"+id, id); err != nil {
+			t.Errorf("%s was not archived: %v", id, err)
+		}
+	}
+	m, err := a.store.Message(a.acc, "thread:two@x", "two@x")
+	if err != nil {
+		t.Fatalf("no note for the refused message: %v", err)
+	}
+	if !strings.Contains(m.Text, "could not download") || !strings.Contains(m.Text, "could not be FETCHed") {
+		t.Errorf("note = %q", m.Text)
+	}
+	if uids, _ := a.sink.FolderUIDs("INBOX"); !slices.Equal(uids, []uint32{1, 2, 3}) {
+		t.Errorf("filed UIDs = %v", uids)
+	}
+	cp, _ := r.load("INBOX")
+	if !cp.Done {
+		t.Errorf("history is not done: %+v", cp)
+	}
+}
+
+// A folder the server will not open is passed over; the others are archived.
+func TestAFolderTheServerRefusesIsSkipped(t *testing.T) {
+	a := newArchived(t)
+	srv := newFakeServer("INBOX", "Odd")
+	srv.add("INBOX", msg("in@x", "a@example.com", "In", "in"), now)
+	srv.add("Odd", msg("odd@x", "a@example.com", "Odd", "odd"), now)
+	srv.refuseSelect = map[string]bool{"Odd": true}
+	state := newMemState()
+	login(state, "app-password")
+	r := start(t, a, srv, state, nil, time.Hour)
+	r.settle()
+	if _, err := a.store.Message(a.acc, "thread:in@x", "in@x"); err != nil {
+		t.Errorf("the Inbox was not archived: %v", err)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/fenelon/arc5/internal/connector"
@@ -99,13 +100,23 @@ func (r *run) cycle(ctx context.Context) error {
 		}
 	}
 	seen := map[string]looked{}
+	var open []model.Folder // the archived folders the server lets us open
+	var trouble []string
 	for _, f := range archived {
 		l, err := r.newMail(ctx, f.SourceID)
+		if errors.Is(err, errServerRefused) {
+			// The server will not open this folder now: pass it over rather
+			// than stop every other folder behind it.
+			trouble = append(trouble, fmt.Sprintf("%s could not be opened: %v", f.Name, err))
+			continue
+		}
 		if err != nil {
 			return err
 		}
 		seen[f.SourceID] = l
+		open = append(open, f)
 	}
+	archived = open
 	for _, f := range archived {
 		if err := r.deletions(ctx, f.SourceID, seen[f.SourceID]); err != nil {
 			return err
@@ -119,7 +130,7 @@ func (r *run) cycle(ctx context.Context) error {
 	if done == len(archived) {
 		phase = connector.PhaseLive
 	}
-	r.sink.ReportProgress(connector.Progress{Phase: phase, ChatsDone: done, ChatsTotal: len(archived)})
+	r.sink.ReportProgress(connector.Progress{Phase: phase, ChatsDone: done, ChatsTotal: len(archived), Detail: strings.Join(trouble, "; ")})
 	if done < len(archived) && !r.o.paused {
 		return nil // more history first
 	}
@@ -312,11 +323,80 @@ func (r *run) history(ctx context.Context, folders []model.Folder) (int, error) 
 	return done, nil
 }
 
+// maxAttempts is how often a message the server will not hand over is tried
+// before a note stands in for it, so one message cannot hold up a folder.
+const maxAttempts = 3
+
+func attemptsKey(folder string) string { return "attempts:" + folder }
+
+// attempt counts one more try at a message, kept in the state so a crash or
+// a dropped connection while fetching it counts too. It reports the tries
+// before this one.
+func (r *run) attempt(folder string, uid uint32) (int, error) {
+	tries := map[uint32]int{}
+	if _, err := loadJSON(r.state, attemptsKey(folder), &tries); err != nil {
+		return 0, err
+	}
+	before := tries[uid]
+	tries[uid] = before + 1
+	return before, saveJSON(r.state, attemptsKey(folder), tries)
+}
+
+// fetched forgets the tries at a message that was stored.
+func (r *run) fetched(folder string, uid uint32) error {
+	tries := map[uint32]int{}
+	if _, err := loadJSON(r.state, attemptsKey(folder), &tries); err != nil || tries[uid] == 0 {
+		return err
+	}
+	delete(tries, uid)
+	return saveJSON(r.state, attemptsKey(folder), tries)
+}
+
+// stand stores a note in place of a message the server would not hand
+// over, so the folder's catch-up can go on. The message stays on the server.
+func (r *run) stand(ctx context.Context, folder string, h header, reason error) error {
+	sel, err := r.cl.Select(ctx, folder)
+	if err != nil {
+		return err
+	}
+	id := h.MessageID
+	if id == "" {
+		id = fmt.Sprintf("uid:%s:%d:%d", folder, sel.UIDValidity, h.UID)
+	}
+	received := h.Received
+	if received.IsZero() {
+		received = r.c.now()
+	}
+	chat := "thread:" + id
+	if err := r.sink.UpsertChat(model.Chat{SourceID: chat, Kind: model.ChatThread, Title: "Message arc5 could not download"}); err != nil {
+		return err
+	}
+	text := fmt.Sprintf("arc5 could not download this message from the server after %d tries (%v). It is still in the mailbox, in %s.", maxAttempts, reason, folder)
+	if _, err := r.sink.UpsertMessage(model.Message{ChatSourceID: chat, SourceID: id, SentAt: received, Text: text}); err != nil {
+		return err
+	}
+	if err := r.sink.FileInFolder(folder, h.UID, chat, id); err != nil {
+		return err
+	}
+	return r.fetched(folder, h.UID)
+}
+
 // store archives messages of the selected folder and files them there. A
 // message already archived (by its Message-ID) is only filed.
 func (r *run) store(ctx context.Context, folder string, uids []uint32) error {
 	heads, err := r.cl.Headers(ctx, uids)
-	if err != nil {
+	if errors.Is(err, errServerRefused) {
+		if len(uids) > 1 {
+			// One message spoils the batch on some servers: go one by one.
+			for _, uid := range uids {
+				if err := r.store(ctx, folder, []uint32{uid}); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		heads = []header{{UID: uids[0]}}
+	} else if err != nil {
 		return err
 	}
 	for _, h := range heads {
@@ -332,11 +412,29 @@ func (r *run) store(ctx context.Context, folder string, uids []uint32) error {
 				continue
 			}
 		}
+		tries, err := r.attempt(folder, h.UID)
+		if err != nil {
+			return err
+		}
+		if tries >= maxAttempts {
+			// Earlier tries ended the connection (a timeout on a huge
+			// message, say): stop trying.
+			if err := r.stand(ctx, folder, h, errors.New("each try failed")); err != nil {
+				return err
+			}
+			continue
+		}
 		raw, err := r.cl.Fetch(ctx, h.UID, h.Size > maxMessage)
 		if errors.Is(err, errGone) {
 			continue // expunged since it was listed
 		}
 		if err != nil {
+			if errors.Is(err, errServerRefused) && tries+1 >= maxAttempts {
+				if err := r.stand(ctx, folder, h, err); err != nil {
+					return err
+				}
+				continue
+			}
 			return err
 		}
 		if h.Size > maxMessage {
@@ -351,6 +449,9 @@ func (r *run) store(ctx context.Context, folder string, uids []uint32) error {
 			return fmt.Errorf("storing %s UID %d: %w", folder, h.UID, err)
 		}
 		if err := r.sink.FileInFolder(folder, h.UID, chat, id); err != nil {
+			return err
+		}
+		if err := r.fetched(folder, h.UID); err != nil {
 			return err
 		}
 	}

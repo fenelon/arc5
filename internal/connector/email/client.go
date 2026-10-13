@@ -219,7 +219,7 @@ func (ic *imapClient) Select(ctx context.Context, name string) (selected, error)
 	defer ic.watch(ctx)()
 	data, err := ic.c.Select(name, &imap.SelectOptions{ReadOnly: true}).Wait()
 	if err != nil {
-		return selected{}, ctxErr(ctx, err)
+		return selected{}, ctxErr(ctx, refused(err))
 	}
 	// What the server said while opening the folder is not a change.
 	select {
@@ -269,7 +269,7 @@ func (ic *imapClient) Headers(ctx context.Context, uids []uint32) ([]header, err
 		UID: true, RFC822Size: true, InternalDate: true, BodySection: []*imap.FetchItemBodySection{messageIDHeader},
 	}).Collect()
 	if err != nil {
-		return nil, ctxErr(ctx, err)
+		return nil, ctxErr(ctx, refused(err))
 	}
 	out := make([]header, 0, len(msgs))
 	for _, m := range msgs {
@@ -294,7 +294,7 @@ func (ic *imapClient) Fetch(ctx context.Context, uid uint32, headersOnly bool) (
 	}
 	msgs, err := ic.c.Fetch(uidSet([]uint32{uid}), &imap.FetchOptions{UID: true, BodySection: []*imap.FetchItemBodySection{section}}).Collect()
 	if err != nil {
-		return nil, ctxErr(ctx, err)
+		return nil, ctxErr(ctx, refused(err))
 	}
 	for _, m := range msgs {
 		if uint32(m.UID) == uid {
@@ -308,6 +308,19 @@ func (ic *imapClient) Fetch(ctx context.Context, uid uint32, headersOnly bool) (
 
 // errGone is a message that left the folder before it could be fetched.
 var errGone = errors.New("the message is no longer in the folder")
+
+// errServerRefused is a command the server answered with NO or BAD: the
+// connection is fine, but this folder or message cannot be had now.
+var errServerRefused = errors.New("the mail server refused")
+
+// refused marks the server's NO or BAD as errServerRefused.
+func refused(err error) error {
+	var imapErr *imap.Error
+	if errors.As(err, &imapErr) {
+		return fmt.Errorf("%w: %s %s", errServerRefused, imapErr.Type, imapErr.Text)
+	}
+	return err
+}
 
 func (ic *imapClient) Idle(ctx context.Context, wait time.Duration) error {
 	if err := ctx.Err(); err != nil {

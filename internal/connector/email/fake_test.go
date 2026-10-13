@@ -22,7 +22,13 @@ type fakeServer struct {
 	full     []string // "folder/uid" of every whole-message fetch
 	dialErr  error
 	listErr  error
+	// refuseFetch makes fetching "folder/uid" fail as Gmail's "NO Some
+	// messages could not be FETCHed" does; refuseSelect, opening a folder.
+	refuseFetch  map[string]bool
+	refuseSelect map[string]bool
 }
+
+var errFakeRefused = fmt.Errorf("%w: NO Some messages could not be FETCHed", errServerRefused)
 
 type fakeFolder struct {
 	attrs    []string
@@ -141,6 +147,9 @@ func (c *fakeClient) Select(_ context.Context, name string) (selected, error) {
 	if !ok {
 		return selected{}, fmt.Errorf("no folder %q", name)
 	}
+	if c.s.refuseSelect[name] {
+		return selected{}, fmt.Errorf("%w: NO [CANNOT] this folder cannot be opened", errServerRefused)
+	}
 	c.sel = name
 	return selected{UIDValidity: f.validity, UIDNext: f.next, Messages: uint32(len(f.msgs))}, nil
 }
@@ -184,6 +193,9 @@ func (c *fakeClient) Headers(_ context.Context, uids []uint32) ([]header, error)
 		if !ok {
 			continue
 		}
+		if c.s.refuseFetch[fmt.Sprintf("%s/%d", c.sel, uid)] && len(uids) > 1 {
+			return nil, errFakeRefused // the whole command fails, as on Gmail
+		}
 		h := header{UID: uid, Size: int64(len(m.raw)), Received: m.received}
 		for _, line := range strings.Split(string(headerOf(m.raw)), "\r\n") {
 			if k, v, ok := strings.Cut(line, ":"); ok && strings.EqualFold(k, "Message-ID") {
@@ -201,6 +213,9 @@ func (c *fakeClient) Fetch(_ context.Context, uid uint32, headersOnly bool) ([]b
 	m, ok := c.message(uid)
 	if !ok {
 		return nil, errGone
+	}
+	if c.s.refuseFetch[fmt.Sprintf("%s/%d", c.sel, uid)] {
+		return nil, errFakeRefused
 	}
 	if headersOnly {
 		return headerOf(m.raw), nil
