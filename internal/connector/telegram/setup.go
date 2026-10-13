@@ -200,6 +200,13 @@ func (s *setup) finish(ctx context.Context) (connector.Step, error) {
 	if known, err := loadSelf(s.state); err != nil {
 		return connector.Step{}, err
 	} else if known != 0 && known != me.ID {
+		// End the session just made for the other account, at Telegram and here.
+		_ = s.conn.LogOut(ctx)
+		if err := s.state.Set(keySession, nil); err != nil {
+			return connector.Step{}, err
+		}
+		s.Close()
+		s.at = ""
 		return connector.Step{}, errors.New("This source archives another Telegram account. Log in with that account, or add a new source for this one.")
 	}
 	if err := saveCredentials(s.state, s.creds); err != nil {

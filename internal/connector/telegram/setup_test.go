@@ -134,14 +134,20 @@ func TestLoginRefusesAnotherAccount(t *testing.T) {
 	if err := saveCredentials(state, credentials{ID: 9, Hash: "0123456789abcdef0123456789abcdef"}); err != nil {
 		t.Fatal(err)
 	}
-	flow := newTestConnector(&fakeDialer{conn: &fakeConn{}}).Setup(state)
+	fc := &fakeConn{}
+	flow := newTestConnector(&fakeDialer{conn: fc}).Setup(state)
 	keys := step(t, flow, nil, "Your Telegram API keys")
 	if keys.Fields[0].Default != "9" || !strings.Contains(keys.Fields[1].Help, "empty") {
 		t.Errorf("stored keys are offered: %+v", keys.Fields)
 	}
 	step(t, flow, map[string]string{"api_id": "9", "api_hash": ""}, "Your phone number")
 	step(t, flow, map[string]string{"phone": "+34 600"}, "The login code")
+	state.Set(keySession, []byte("the other account's session")) // as the login connection stores it
 	refused(t, flow, map[string]string{"code": "12345"}, "another Telegram account")
+	// Review finding: the other account's live session stayed behind.
+	if v, _ := state.Get(keySession); v != nil || fc.loggedOut != 1 {
+		t.Errorf("after refusing another account: session %q, logged out %d times", v, fc.loggedOut)
+	}
 }
 
 func TestLoginWhenTelegramCannotBeReached(t *testing.T) {
