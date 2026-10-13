@@ -138,8 +138,12 @@ func (r *run) cycle(ctx context.Context) error {
 	if watched == "" {
 		return r.c.sleep(ctx, r.c.wait)
 	}
-	if _, err := r.cl.Select(ctx, watched); err != nil {
+	sel, err := r.cl.Select(ctx, watched)
+	if err != nil {
 		return err
+	}
+	if sel.Messages != seen[watched].messages {
+		return nil // mail came or went since the pass: look again now
 	}
 	return r.cl.Idle(ctx, r.c.wait)
 }
@@ -182,6 +186,17 @@ func (r *run) newMail(ctx context.Context, folder string) (looked, error) {
 	sel, err := r.cl.Select(ctx, folder)
 	if err != nil {
 		return looked{}, err
+	}
+	if sel.UIDNext == 0 {
+		// UIDNEXT is optional (RFC 3501): one past the highest UID will do.
+		uids, err := r.cl.Search(ctx, 1, 0, time.Time{})
+		if err != nil {
+			return looked{}, err
+		}
+		sel.UIDNext = 1
+		if len(uids) > 0 {
+			sel.UIDNext = uids[len(uids)-1] + 1
+		}
 	}
 	cp, err := r.load(folder)
 	if err != nil {
@@ -281,18 +296,33 @@ func (r *run) history(ctx context.Context, folders []model.Folder) (int, error) 
 			// already stored is only matched, not downloaded.
 			cp.Done, cp.Oldest = false, cp.Next
 		}
+		window := uint32(historyWindow)
 		for !cp.Done && !r.o.paused {
 			if r.c.now().After(deadline) && r.c.slice > 0 {
 				break
 			}
+			// Search a window of UIDs just below where history stands,
+			// widening it while it finds nothing, rather than listing every
+			// remaining UID each time (Gmail counts that against a quota).
 			var uids []uint32
+			from := uint32(1)
 			if cp.Oldest > 1 {
+				if cp.Oldest > window {
+					from = cp.Oldest - window
+				}
 				if _, err := r.cl.Select(ctx, f.SourceID); err != nil {
 					return done, err
 				}
-				if uids, err = r.cl.Search(ctx, 1, cp.Oldest-1, r.o.since); err != nil {
+				if uids, err = r.cl.Search(ctx, from, cp.Oldest-1, r.o.since); err != nil {
 					return done, err
 				}
+			}
+			if len(uids) == 0 && from > 1 {
+				cp.Oldest, window = from, min(window*4, 1<<30)
+				if err := r.save(f.SourceID, cp); err != nil {
+					return done, err
+				}
+				continue
 			}
 			if len(uids) == 0 {
 				cp.Done, cp.Since = true, since
@@ -322,6 +352,10 @@ func (r *run) history(ctx context.Context, folders []model.Folder) (int, error) 
 	}
 	return done, nil
 }
+
+// historyWindow is how many UIDs below where history stands one search
+// covers at first.
+const historyWindow = 1000
 
 // maxAttempts is how often a message the server will not hand over is tried
 // before a note stands in for it, so one message cannot hold up a folder.
@@ -461,6 +495,17 @@ func (r *run) store(ctx context.Context, folder string, uids []uint32) error {
 // serveRequests answers "Fetch now" from the kept originals. Only a storage
 // failure ends it, and with it the run.
 func (r *run) serveRequests(ctx context.Context) error {
+	// Files left waiting by an earlier run, such as one that stopped between
+	// storing a message and its files, are taken from the originals first.
+	waiting, err := r.sink.PendingMedia()
+	if err != nil {
+		return err
+	}
+	for _, ref := range waiting {
+		if err := r.fetchNow(ref); err != nil {
+			return err
+		}
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -469,16 +514,25 @@ func (r *run) serveRequests(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			err := FetchFromOriginal(r.sink, ref)
-			switch {
-			case err == nil:
-			case errors.Is(err, connector.ErrStorage):
+			if err := r.fetchNow(ref); err != nil {
 				return err
-			default:
-				if err := r.sink.SetAttachmentStatus(ref, model.StatusFailed, err.Error()); err != nil && errors.Is(err, connector.ErrStorage) {
-					return err
-				}
 			}
 		}
 	}
+}
+
+// fetchNow takes one file out of its original. Only a storage failure is
+// returned; anything else marks the file failed.
+func (r *run) fetchNow(ref model.AttachmentRef) error {
+	err := FetchFromOriginal(r.sink, ref)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, connector.ErrStorage):
+		return err
+	}
+	if err := r.sink.SetAttachmentStatus(ref, model.StatusFailed, err.Error()); errors.Is(err, connector.ErrStorage) {
+		return err
+	}
+	return nil
 }

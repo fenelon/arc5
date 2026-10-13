@@ -2,8 +2,10 @@ package email
 
 import (
 	"context"
+
 	"errors"
 	"fmt"
+	"github.com/emersion/go-imap/v2"
 	"slices"
 	"strings"
 	"testing"
@@ -428,6 +430,115 @@ func TestAFolderTheServerRefusesIsSkipped(t *testing.T) {
 	r.settle()
 	if _, err := a.store.Message(a.acc, "thread:in@x", "in@x"); err != nil {
 		t.Errorf("the Inbox was not archived: %v", err)
+	}
+}
+
+func manualRun(t *testing.T, a *archived, srv *fakeServer) *run {
+	t.Helper()
+	cl, _ := srv.dial(context.Background(), account{Password: "app-password"})
+	c := &Connector{dial: srv.dial, now: func() time.Time { return now }, sleep: func(ctx context.Context, _ time.Duration) error { return ctx.Err() }, slice: time.Hour, wait: time.Millisecond}
+	return &run{c: c, cl: cl, sink: a.sink, state: newMemState(), o: options{own: map[string]bool{}}}
+}
+
+// A server that leaves UIDNEXT out still has its new mail captured.
+func TestNoUIDNext(t *testing.T) {
+	a := newArchived(t)
+	srv := newFakeServer("INBOX")
+	srv.noUIDNext = true
+	srv.add("INBOX", msg("old@x", "a@example.com", "Old", "old"), now.Add(-time.Hour))
+	r := manualRun(t, a, srv)
+	cycleOnce(t, r)
+	srv.add("INBOX", msg("new@x", "a@example.com", "New", "new"), now)
+	cycleOnce(t, r)
+	for _, id := range []string{"old@x", "new@x"} {
+		if _, err := a.store.Message(a.acc, "thread:"+id, id); err != nil {
+			t.Errorf("%s: %v", id, err)
+		}
+	}
+}
+
+// Mail that arrives between the new-mail pass and the wait is taken in
+// at once, not after the wait.
+func TestMailArrivingBeforeTheWaitIsNotLeftWaiting(t *testing.T) {
+	a := newArchived(t)
+	srv := newFakeServer("INBOX")
+	srv.add("INBOX", msg("old@x", "a@example.com", "Old", "old"), now.Add(-time.Hour))
+	r := manualRun(t, a, srv)
+	ctx := context.Background()
+	r.cycle(ctx)
+	r.cycle(ctx) // history done: the cycle ends in a wait
+	before := srv.idles
+	opened := 0
+	srv.onSelect = func(name string) {
+		if opened++; opened == 2 { // the Inbox opened again to wait on it
+			srv.add("INBOX", msg("late@x", "a@example.com", "Late", "late"), now)
+		}
+	}
+	if err := r.cycle(ctx); err != nil {
+		t.Fatal(err)
+	}
+	srv.onSelect = nil
+	if srv.idles != before {
+		t.Error("the cycle waited although new mail had arrived")
+	}
+}
+
+// History reads a window of UIDs below where it stands, not every UID down
+// to 1 each time.
+func TestHistorySearchesAWindow(t *testing.T) {
+	a := newArchived(t)
+	srv := newFakeServer("INBOX")
+	srv.startAt("INBOX", 50_000)
+	for i := 0; i < 3; i++ {
+		srv.add("INBOX", msg(fmt.Sprintf("w%d@x", i), "a@example.com", "W", "w"), now.Add(-time.Hour))
+	}
+	r := manualRun(t, a, srv)
+	cycleOnce(t, r)
+	if n := a.count(t); n != 3 {
+		t.Fatalf("%d stored", n)
+	}
+	for _, s := range srv.searches {
+		if strings.HasPrefix(s, "INBOX 1:") && !strings.HasSuffix(s, ":0") {
+			// Reaching UID 1 is fine only once the window has grown to it.
+			if s != srv.searches[len(srv.searches)-1] {
+				t.Errorf("an early history search reads from UID 1: %v", srv.searches)
+			}
+		}
+	}
+	if s := srv.searches[0]; s != "INBOX 49003:50002" {
+		t.Errorf("the first history search = %q, want a window just below 50000 (all: %v)", s, srv.searches)
+	}
+}
+
+// Files still waiting when a run starts are taken from the originals.
+func TestWaitingFilesAreFetchedAtStart(t *testing.T) {
+	a := newArchived(t)
+	if err := a.sink.UpsertChat(model.Chat{SourceID: "thread:w@x", Kind: model.ChatThread, Title: "W"}); err != nil {
+		t.Fatal(err)
+	}
+	raw := crlf("From: a@example.com\nSubject: W\nMessage-ID: <w@x>\nContent-Type: multipart/mixed; boundary=b\n\n--b\nContent-Type: text/plain\n\nhi\n--b\nContent-Type: application/zip\nContent-Disposition: attachment; filename=w.zip\n\nzip bytes\n--b--\n")
+	pending, err := a.sink.UpsertMessage(model.Message{ChatSourceID: "thread:w@x", SourceID: "w@x", SentAt: now, Text: "hi", Original: raw,
+		Attachments: []model.Attachment{{Kind: model.AttachDocument, FileName: "w.zip", Size: 9, SourceID: "part:2"}}})
+	if err != nil || len(pending) != 1 {
+		t.Fatalf("pending = %v, %v", pending, err)
+	}
+	srv := newFakeServer("INBOX")
+	state := newMemState()
+	login(state, "app-password")
+	r := start(t, a, srv, state, nil, time.Hour)
+	r.settle()
+	atts, _ := a.store.Attachments(a.message(t, "thread:w@x", "w@x").ID)
+	if len(atts) != 1 || atts[0].Status != model.StatusStored {
+		t.Errorf("a waiting file was not fetched: %+v", atts)
+	}
+}
+
+func TestCanIdle(t *testing.T) {
+	if !canIdle(imap.CapSet{imap.CapIMAP4rev1: {}, imap.CapIdle: {}}) || !canIdle(imap.CapSet{imap.CapIMAP4rev2: {}}) {
+		t.Error("IDLE offered but not used")
+	}
+	if canIdle(imap.CapSet{imap.CapIMAP4rev1: {}}) {
+		t.Error("IDLE used where it is not offered")
 	}
 }
 

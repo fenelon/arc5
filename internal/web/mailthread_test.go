@@ -2,6 +2,8 @@ package web
 
 import (
 	"fmt"
+
+	"github.com/fenelon/arc5/internal/model"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -51,6 +53,20 @@ func TestThreadView(t *testing.T) {
 			t.Errorf("%s: %d, want 404", path, rec.Code)
 		}
 	}
+}
+
+// A file still waiting to be taken from its message can be asked for.
+func TestWaitingFileCanBeFetched(t *testing.T) {
+	m := newMailSite(t)
+	if err := m.store.UpsertChat(m.box, model.Chat{SourceID: "thread:wait@x", Kind: model.ChatThread, Title: "Waiting"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.store.UpsertMessage(m.box, model.Message{ChatSourceID: "thread:wait@x", SourceID: "wait@x", SentAt: noon, Text: "see file",
+		Attachments: []model.Attachment{{Kind: model.AttachDocument, FileName: "wait.zip", Size: 9, SourceID: "part:2"}}}); err != nil {
+		t.Fatal(err)
+	}
+	body := m.page(fmt.Sprintf("/s/%d/c/%d?folder=all", m.box, m.thread("Waiting")))
+	has(t, body, "wait.zip", "Waiting to be downloaded", ">Fetch now</button>")
 }
 
 func TestThreadFoldsQuotes(t *testing.T) {

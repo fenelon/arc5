@@ -129,6 +129,35 @@ func TestSetupUnknownDomainAndLoggingInAgain(t *testing.T) {
 	}
 }
 
+// The stored password is kept only for the same server and user name: a
+// changed host gets no password it was not given.
+func TestLoggingInAgainElsewhereNeedsThePassword(t *testing.T) {
+	srv := newFakeServer("INBOX")
+	var dialed []account
+	c := &Connector{dial: func(ctx context.Context, a account) (client, error) {
+		dialed = append(dialed, a)
+		return srv.dial(ctx, a)
+	}}
+	state := newMemState()
+	saveJSON(state, keyAccount, account{Address: "me@example.org", Host: "imap.example.org", Port: 993, Username: "me", Password: "app-password"})
+	ctx := context.Background()
+	for _, change := range []map[string]string{
+		{"host": "imap.attacker.example", "port": "993", "username": "me"},
+		{"host": "imap.example.org", "port": "143", "username": "me"},
+		{"host": "imap.example.org", "port": "993", "username": "someone-else"},
+	} {
+		flow := c.Setup(state)
+		flow.Next(ctx, nil)
+		change["password"] = ""
+		if _, err := flow.Next(ctx, change); err == nil || !strings.Contains(err.Error(), "password") {
+			t.Errorf("%v: %v", change, err)
+		}
+	}
+	if len(dialed) != 0 {
+		t.Errorf("the stored password was sent to %+v", dialed)
+	}
+}
+
 func TestSignOut(t *testing.T) {
 	srv := newFakeServer("INBOX")
 	c := &Connector{dial: srv.dial}

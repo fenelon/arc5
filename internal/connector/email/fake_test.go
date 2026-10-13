@@ -26,6 +26,17 @@ type fakeServer struct {
 	// messages could not be FETCHed" does; refuseSelect, opening a folder.
 	refuseFetch  map[string]bool
 	refuseSelect map[string]bool
+	noUIDNext    bool              // the server leaves UIDNEXT out, as RFC 3501 allows
+	onSelect     func(name string) // called as a folder is opened
+	idles        int
+	searches     []string // "folder from:to" of every search
+}
+
+// startAt makes a folder's UIDs start at uid, as a long-used mailbox's do.
+func (s *fakeServer) startAt(folder string, uid uint32) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.folders[folder].next = uid
 }
 
 var errFakeRefused = fmt.Errorf("%w: NO Some messages could not be FETCHed", errServerRefused)
@@ -141,6 +152,9 @@ func (c *fakeClient) List(context.Context) ([]mailbox, error) {
 }
 
 func (c *fakeClient) Select(_ context.Context, name string) (selected, error) {
+	if c.s.onSelect != nil {
+		c.s.onSelect(name)
+	}
 	c.s.mu.Lock()
 	defer c.s.mu.Unlock()
 	f, ok := c.s.folders[name]
@@ -151,7 +165,11 @@ func (c *fakeClient) Select(_ context.Context, name string) (selected, error) {
 		return selected{}, fmt.Errorf("%w: NO [CANNOT] this folder cannot be opened", errServerRefused)
 	}
 	c.sel = name
-	return selected{UIDValidity: f.validity, UIDNext: f.next, Messages: uint32(len(f.msgs))}, nil
+	next := f.next
+	if c.s.noUIDNext {
+		next = 0
+	}
+	return selected{UIDValidity: f.validity, UIDNext: next, Messages: uint32(len(f.msgs))}, nil
 }
 
 func (c *fakeClient) folder() *fakeFolder { return c.s.folders[c.sel] }
@@ -159,6 +177,7 @@ func (c *fakeClient) folder() *fakeFolder { return c.s.folders[c.sel] }
 func (c *fakeClient) Search(_ context.Context, from, to uint32, since time.Time) ([]uint32, error) {
 	c.s.mu.Lock()
 	defer c.s.mu.Unlock()
+	c.s.searches = append(c.s.searches, fmt.Sprintf("%s %d:%d", c.sel, from, to))
 	var out []uint32
 	for _, m := range c.folder().msgs {
 		if m.uid >= from && (to == 0 || m.uid <= to) && (since.IsZero() || !m.received.Before(since)) {
@@ -225,6 +244,9 @@ func (c *fakeClient) Fetch(_ context.Context, uid uint32, headersOnly bool) ([]b
 }
 
 func (c *fakeClient) Idle(ctx context.Context, wait time.Duration) error {
+	c.s.mu.Lock()
+	c.s.idles++
+	c.s.mu.Unlock()
 	select {
 	case <-c.s.changed:
 		return nil

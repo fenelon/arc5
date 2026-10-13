@@ -322,9 +322,28 @@ func refused(err error) error {
 	return err
 }
 
+// pollEvery is how long a server without IDLE is left before looking again.
+const pollEvery = time.Minute
+
+// canIdle reports whether a server offers IDLE.
+func canIdle(caps imap.CapSet) bool {
+	return caps.Has(imap.CapIdle) || caps.Has(imap.CapIMAP4rev2)
+}
+
 func (ic *imapClient) Idle(ctx context.Context, wait time.Duration) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if !canIdle(ic.c.Caps()) {
+		// No IDLE: look again after a while instead.
+		t := time.NewTimer(min(wait, pollEvery))
+		defer t.Stop()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C:
+			return nil
+		}
 	}
 	select {
 	case <-ic.changes:

@@ -91,7 +91,7 @@ func (s *setup) serverStep() connector.Step {
 		},
 	}
 	if s.stored.Password != "" {
-		st.Fields[3].Help = "Leave it empty to keep the password saved for this source."
+		st.Fields[3].Help = "Leave it empty to keep the password saved for this source, if the server and user name stay the same."
 	}
 	return st
 }
@@ -142,7 +142,8 @@ func (s *setup) login(ctx context.Context, input map[string]string) (connector.S
 	if a.Username == "" {
 		a.Username = s.address
 	}
-	if a.Password == "" && s.stored.Password != "" {
+	// The stored password goes only to the server and user it was given for.
+	if a.Password == "" && s.stored.Password != "" && a.Host == s.stored.Host && a.Port == s.stored.Port && a.Username == s.stored.Username {
 		a.Password = s.stored.Password
 	}
 	if a.Password == "" {
