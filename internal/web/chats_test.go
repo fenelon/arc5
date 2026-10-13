@@ -140,6 +140,18 @@ func TestChatListGrows(t *testing.T) {
 	if rec := s.get(fmt.Sprintf("/s/%d?chats=banana", acc)); rec.Code != http.StatusOK {
 		t.Errorf("a bad chats value: status %d", rec.Code)
 	}
+
+	// Opening a chat from the longer list keeps the list that long, with the
+	// chat in it, and so does moving about the conversation.
+	oldest := s.chatID(acc, "chat-000")
+	open := fmt.Sprintf("/s/%d/c/%d?chats=200", acc, oldest)
+	has(t, all, fmt.Sprintf(`href="%s"`, open))
+	chat := s.page(open)
+	has(t, chat, `class="row row--current" href="`+strings.ReplaceAll(open, "&", "&amp;")+`"`, "chat-000", "chat-100",
+		fmt.Sprintf(`href="/s/%d/c/%d?date=2026-07-01&amp;chats=200"`, acc, oldest))
+	lacks(t, chat, "Show more chats")
+	// The first page's rows need no count.
+	has(t, first, fmt.Sprintf(`href="/s/%d/c/%d"`, acc, s.chatID(acc, "chat-100")))
 }
 
 func TestPickerListsSourcesByKind(t *testing.T) {

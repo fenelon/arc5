@@ -1,11 +1,19 @@
 {{define "empty"}}{{template "head" .}}
 <body class="app">
 {{template "topbar" .}}
-<main class="plain plain--wide">
-<h1>No sources yet</h1>
-<p>A source is an account arc5 keeps a copy of.</p>
-<p><a class="button" href="/sources/new">Add a source</a></p>
-<p>To look around first, stop the server, run <span class="code">arc5 demo --data &lt;folder&gt;</span> and start it again on that folder.</p>
+<main class="plain plain--welcome">
+<h1 class="welcome__title">Start your archive</h1>
+<p class="welcome__lead">No sources yet. A source is an account arc5 keeps a copy of: choose the first one, then log in to it.</p>
+{{if .Choices}}<div class="tiles tiles--add">
+{{range .Choices}}<a class="tile tile--wide tile--add" href="/sources/new?connector={{.Name}}">{{template "logo" .Logo}}<span class="tile__text"><span class="tile__name">{{.Title}}</span>{{if .Blurb}}<span class="tile__sub tile__sub--wrap">{{.Blurb}}</span>{{end}}</span><svg class="tile__go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></a>
+{{end}}</div>
+{{else}}<p class="welcome__lead">No kind of source is built into this copy of arc5 yet.</p>
+{{end}}<ul class="promises">
+<li class="promise"><svg class="promise__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span><span class="promise__title">Stays on this computer</span> Messages, media and logins are kept in the data folder, nowhere else.</span></li>
+<li class="promise"><svg class="promise__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span><span class="promise__title">Only reads</span> arc5 never sends, edits or deletes anything in your accounts.</span></li>
+<li class="promise"><svg class="promise__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg><span><span class="promise__title">Deleted there, kept here</span> A message deleted at the source stays in the archive, marked as deleted.</span></li>
+</ul>
+<p class="welcome__demo">To look around first, stop the server, run <span class="code">arc5 demo --data &lt;folder&gt;</span> and start it again on that folder.</p>
 </main>
 </body>
 </html>{{end}}

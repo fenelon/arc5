@@ -30,6 +30,7 @@ type Conversation struct {
 
 type Day struct {
 	Label    string
+	Key      string // the date, as 2006-01-02, so pages loaded in place can join a day split between them
 	Messages []Message
 }
 
@@ -48,6 +49,37 @@ type Message struct {
 	Versions      []Version
 	Replaced      []ReplacedFile // media edits replaced, oldest first
 	Attachments   []Attachment
+	Reply         *Reply // what it replies to, or nil
+}
+
+// Reply is what a reply answers, as a quote above it. Missing says it
+// answers a message the archive does not have; Href is "" then.
+type Reply struct {
+	Href, Name, Text string
+	Missing          bool
+}
+
+// quoteText is how a quoted message reads in one line: its text, or what it
+// carried.
+func quoteText(q *archive.Quote) string {
+	if text := strings.TrimSpace(q.Text); text != "" {
+		return text
+	}
+	switch q.FileKind {
+	case model.AttachPhoto:
+		return "Photo"
+	case model.AttachVideo:
+		return "Video"
+	case model.AttachVoice:
+		return "Voice message"
+	case model.AttachAudio:
+		return "Audio: " + q.File
+	case model.AttachSticker:
+		return "Sticker"
+	case "":
+		return "Message"
+	}
+	return "File: " + q.File
 }
 
 // ReplacedFile is an attachment an edit replaced. URL is "" when the file
@@ -183,9 +215,9 @@ func rail(path, keep string, quarters []archive.Quarter, now time.Time) ([]RailY
 	nowYear, nowQuarter := now.Year(), (int(now.Month())+2)/3
 	var years []RailYear
 	var options []YearOption
-	for year := newest; year >= oldest; year-- {
+	for year := oldest; year <= newest; year++ {
 		y := RailYear{Label: strconv.Itoa(year), Now: year == nowYear}
-		for quarter := 4; quarter >= 1; quarter-- {
+		for quarter := 1; quarter <= 4; quarter++ {
 			n := count[[2]int{year, quarter}]
 			level := 0
 			if n > 0 {
@@ -198,7 +230,8 @@ func rail(path, keep string, quarters []archive.Quarter, now time.Time) ([]RailY
 			})
 		}
 		years = append(years, y)
-		options = append(options, YearOption{Value: fmt.Sprintf("%d-01-01", year), Label: y.Label, Current: y.Now})
+		// The phone's year picker lists the newest first, as it opens on them.
+		options = append([]YearOption{{Value: fmt.Sprintf("%d-01-01", year), Label: y.Label, Current: y.Now}}, options...)
 	}
 	return years, options
 }
@@ -280,9 +313,28 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 	path := fmt.Sprintf("/s/%s/c/%d", sel.Key, chatID)
 	q := searchQuery(r)
 	keep := keepQuery(q)
-	conv := &Conversation{Title: chat.Title, BackHref: "/s/" + sel.Key, SelfHref: r.URL.RequestURI()}
+	searching := keep != ""
+	if n := chatCount(r); n > chatsPerPage {
+		keep += fmt.Sprintf("&chats=%d", n) // the chat list stays as long as the owner made it
+	}
+	// part=messages asks for the page's messages alone, loaded in place as
+	// the reader scrolls; forms in it return to the conversation itself.
+	query := r.URL.Query()
+	part := query.Get("part") == "messages"
+	query.Del("part")
+	self := r.URL.RequestURI()
+	if part {
+		self = r.URL.Path
+		if len(query) > 0 {
+			self += "?" + query.Encode()
+		}
+	}
+	conv := &Conversation{Title: chat.Title, BackHref: "/s/" + sel.Key, SelfHref: self}
 	if keep != "" {
-		conv.Query, conv.BackHref = q, "/s/"+sel.Key+"?"+keep[1:]
+		conv.BackHref = "/s/" + sel.Key + "?" + keep[1:]
+	}
+	if searching {
+		conv.Query = q
 	}
 	conv.Subtitle = kindLabel(chat.Kind)
 	if service, known := s.serviceOf(chat.AccountID); known {
@@ -315,17 +367,21 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 	}
 	conv.Years, conv.YearOptions = rail(path, keep, quarters, reading.In(s.deps.Location))
 
+	onPage := map[int64]bool{}
+	for _, m := range window.Messages {
+		onPage[m.ID] = true
+	}
 	for _, m := range window.Messages {
 		sent := m.SentAt.In(s.deps.Location)
 		label := sent.Format("Monday, 2 January 2006")
 		if len(conv.Days) == 0 || conv.Days[len(conv.Days)-1].Label != label {
-			conv.Days = append(conv.Days, Day{Label: label})
+			conv.Days = append(conv.Days, Day{Label: label, Key: sent.Format(time.DateOnly)})
 		}
 		v := Message{
 			Anchor: fmt.Sprintf("m%d", m.ID), Service: m.Kind == model.KindService, Outgoing: m.Outgoing,
 			Target: m.ID == target, ForwardedFrom: m.ForwardedFrom, Text: m.Text, Time: sent.Format("15:04"),
 		}
-		if v.Target && keep != "" {
+		if v.Target && searching {
 			v.Marked = pieces(s.deps.Index.Searcher().Highlight(q, m.Text))
 		}
 		if !m.Outgoing && chat.Kind != model.ChatPrivate {
@@ -361,12 +417,35 @@ func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess a
 		for _, a := range m.Replaced {
 			v.Replaced = append(v.Replaced, replacedView(a, s.deps.Location))
 		}
+		switch q := m.Reply; {
+		case q != nil:
+			name := q.ForwardedFrom
+			switch {
+			case name != "":
+			case q.Outgoing:
+				name = "You"
+			case q.SenderName != "":
+				name = q.SenderName
+			default:
+				name = chat.Title
+			}
+			v.Reply = &Reply{Href: fmt.Sprintf("%s?at=%d%s", path, q.ID, keep), Name: name, Text: quoteText(q)}
+			if onPage[q.ID] {
+				v.Reply.Href = fmt.Sprintf("#m%d", q.ID)
+			}
+		case m.ReplyToSourceID != "":
+			v.Reply = &Reply{Missing: true}
+		}
 		day := &conv.Days[len(conv.Days)-1]
 		day.Messages = append(day.Messages, v)
 	}
 
 	data.Conversation = conv
 	data.Title = chat.Title
+	if part {
+		s.render(w, http.StatusOK, "messages-page", data)
+		return
+	}
 	s.render(w, http.StatusOK, "source", data)
 }
 

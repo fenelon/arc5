@@ -3,7 +3,7 @@
 {{template "topbar" .}}
 {{template "banner" .}}
 <div class="shell{{if .Conversation}} shell--open{{end}}">
-<aside class="list" id="list" aria-label="{{if .Results}}Search results{{else}}Chats{{end}}">
+<aside class="list" id="list" aria-label="{{if .Results}}Search results{{else}}Chats{{end}}" data-controller="list" data-action="click->list#remember">
 {{template "list" .}}
 </aside>
 <section class="conversation" aria-label="Conversation">

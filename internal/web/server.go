@@ -264,6 +264,12 @@ func (s *Server) signedIn(next func(http.ResponseWriter, *http.Request, archive.
 	})
 }
 
+// welcomePage is the first page, before any source is added.
+type welcomePage struct {
+	Page
+	Choices []ConnectorChoice
+}
+
 func (s *Server) home(w http.ResponseWriter, r *http.Request, sess archive.Session) {
 	accounts, err := s.deps.Store.Accounts()
 	if err != nil {
@@ -271,7 +277,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request, sess archive.Sessi
 		return
 	}
 	if len(accounts) == 0 {
-		s.render(w, http.StatusOK, "empty", s.page(r, sess, "Welcome"))
+		s.render(w, http.StatusOK, "empty", welcomePage{Page: s.page(r, sess, "Welcome"), Choices: s.addable()})
 		return
 	}
 	all, err := s.sources()

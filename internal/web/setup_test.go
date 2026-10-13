@@ -270,3 +270,29 @@ func TestSecretFieldsSayUnchangedOnlyWhenSomethingIsKept(t *testing.T) {
 		t.Error("a kept secret setting is not marked as kept, or is shown")
 	}
 }
+
+func TestTheWelcomePageOffersEachKindOfSource(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	s.reg.Register(connector.Info{Name: "telegram", Title: "Telegram", Display: connector.DisplayChats}, func() connector.Connector { return fakeConnector{} })
+	s.reg.Register(connector.Info{Name: "hidden", Title: "Hidden", Display: connector.DisplayChats, Hidden: true}, func() connector.Connector { return fakeConnector{} })
+
+	body := s.page("/")
+	has(t, body, "No sources yet", `href="/sources/new?connector=telegram"`, "Telegram",
+		"Private chats and groups, with their photos, edits and deletions.",
+		"Stays on this computer", `<span class="code">arc5 demo --data &lt;folder&gt;</span>`)
+	lacks(t, body, "Hidden", `connector=hidden`)
+}
+
+func TestAddingASourceStartsWithTheChosenKind(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	s.reg.Register(connector.Info{Name: "fake", Title: "Fake", Display: connector.DisplayChats}, func() connector.Connector { return fakeConnector{} })
+	s.reg.Register(connector.Info{Name: "telegram", Title: "Telegram", Display: connector.DisplayChats}, func() connector.Connector { return fakeConnector{} })
+
+	has(t, s.page("/sources/new?connector=telegram"), `value="telegram" checked`)
+	lacks(t, s.page("/sources/new?connector=telegram"), `value="fake" checked`)
+	// An unknown kind falls back to the first, as no choice does.
+	has(t, s.page("/sources/new?connector=nope"), `value="fake" checked`)
+	has(t, s.page("/sources/new"), `value="fake" checked`)
+}

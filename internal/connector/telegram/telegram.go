@@ -112,6 +112,7 @@ type run struct {
 	mu      sync.Mutex
 	e       *entities               // every user and chat seen, for names and peers
 	order   []string                // chats by recent activity, newest first
+	lastAt  map[string]int64        // when each chat's newest message was sent, from the chat list
 	senders map[string]model.Sender // senders stored by this run, as stored
 	paced   bool                    // a history request has been made
 	known   map[string]model.Chat   // chats stored by this run, as stored

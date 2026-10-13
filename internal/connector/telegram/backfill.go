@@ -52,6 +52,12 @@ func (r *run) backfillChat(ctx context.Context, chat string) error {
 	if cp.Start || (cp.Limit != 0 && !limit.IsZero() && limit.Unix() >= cp.Limit) {
 		return nil // the start of the chat, or this age limit, was reached before
 	}
+	r.mu.Lock()
+	last := r.lastAt[chat]
+	r.mu.Unlock()
+	if !limit.IsZero() && last != 0 && last < limit.Unix() {
+		return nil // nothing in it is recent enough: the chat list says so, without a request
+	}
 	peer, ok := r.inputPeer(chat)
 	if !ok {
 		return nil // Telegram has not told this run how to name the chat
