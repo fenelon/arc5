@@ -211,6 +211,8 @@ func kindLabel(k model.ChatKind) string {
 		return "Channel"
 	case model.ChatBot:
 		return "Bot"
+	case model.ChatThread:
+		return "Conversation"
 	}
 	return "Private chat"
 }
@@ -240,6 +242,9 @@ func (s *Server) anchor(r *http.Request) (archive.Anchor, int64) {
 }
 
 func (s *Server) conversationView(w http.ResponseWriter, r *http.Request, sess archive.Session) {
+	if s.mailRoute(w, r, sess, false) {
+		return
+	}
 	chatID, err := strconv.ParseInt(r.PathValue("chat"), 10, 64)
 	if err != nil {
 		http.NotFound(w, r)

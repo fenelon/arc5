@@ -175,6 +175,9 @@ func (s *Server) sourceShell(w http.ResponseWriter, r *http.Request, sess archiv
 }
 
 func (s *Server) sourceView(w http.ResponseWriter, r *http.Request, sess archive.Session) {
+	if s.mailRoute(w, r, sess, false) {
+		return
+	}
 	data, _, ok := s.sourceShell(w, r, sess, 0)
 	if !ok {
 		return

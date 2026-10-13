@@ -135,6 +135,17 @@ var kinds = []struct {
 	{connector.DisplayMail, "mail", "Mail", "Mailboxes, shown as mail", "mailbox", "mailboxes"},
 }
 
+// one reports whether the selection is one source, rather than every source
+// of a kind.
+func (sel selection) one() bool {
+	for _, k := range kinds {
+		if sel.Key == k.key {
+			return false
+		}
+	}
+	return len(sel.AccountIDs) == 1
+}
+
 func (s *Server) selection(key string, all []source) (selection, bool) {
 	for _, k := range kinds {
 		if key != k.key {
