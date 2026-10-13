@@ -76,6 +76,7 @@ type Results struct {
 	Hits      []HitRow
 	MoreHref  string
 	FirstHref string
+	Filters   *FilterBox // nil for one person's messages
 	Empty     bool
 	Note      string
 }
@@ -112,11 +113,15 @@ func (s *Server) results(ctx context.Context, r *http.Request, sel selection) (*
 	if strings.TrimSpace(q) == "" {
 		return nil, nil
 	}
-	base := "/s/" + sel.Key + "?q=" + url.QueryEscape(q)
+	plain := "/s/" + sel.Key + "?q=" + url.QueryEscape(q)
+	filters := readFilters(r, s.deps.Location)
+	keep := "&q=" + url.QueryEscape(q) + filters.suffix() // what links from the results carry
+	base := plain + filters.suffix()
 	res := &Results{Query: q}
 	searcher := s.deps.Index.Searcher()
 	page := pageNumber(r)
 	query := search.Query{Text: q, AccountIDs: sel.AccountIDs, Limit: resultsPerPage, Offset: (page - 1) * resultsPerPage}
+	filters.apply(&query, s.deps.Location)
 	pageBase := base
 
 	if p := r.URL.Query().Get("person"); p != "" {
@@ -138,14 +143,17 @@ func (s *Server) results(ctx context.Context, r *http.Request, sel selection) (*
 		res.AllHref = base
 		query.Text, query.SenderID, query.Sort = "", id, search.ByNewest
 		pageBase = fmt.Sprintf("%s&person=%d", base, id)
-	} else if page == 1 {
+	} else {
+		res.Filters = filters.box("/s/"+sel.Key, q, plain)
+	}
+	if res.Person == "" && page == 1 {
 		names, err := searcher.Names(ctx, q, sel.AccountIDs, 0)
 		if err != nil {
 			return nil, err
 		}
 		for _, c := range names.Chats {
 			res.Chats = append(res.Chats, NameRow{
-				Href:     fmt.Sprintf("/s/%s/c/%d?q=%s", sel.Key, c.ChatID, url.QueryEscape(q)),
+				Href:     fmt.Sprintf("/s/%s/c/%d?%s", sel.Key, c.ChatID, keep[1:]),
 				Initials: initials(fragmentText(c.Title)), Title: pieces(c.Title),
 				Detail: kindLabel(c.Kind) + ", last message " + s.when(c.LastAt),
 			})
@@ -162,7 +170,7 @@ func (s *Server) results(ctx context.Context, r *http.Request, sel selection) (*
 	at, _ := strconv.ParseInt(r.URL.Query().Get("at"), 10, 64)
 	for _, h := range found.Hits {
 		row := HitRow{
-			Href: fmt.Sprintf("/s/%s/c/%d?at=%d&q=%s", sel.Key, h.ChatID, h.MessageID, url.QueryEscape(q)),
+			Href: fmt.Sprintf("/s/%s/c/%d?at=%d%s", sel.Key, h.ChatID, h.MessageID, keep),
 			Chat: h.ChatTitle, When: s.when(h.SentAt), Snippet: pieces(h.Snippet),
 			Deleted: h.Deleted, Current: h.MessageID == at,
 		}

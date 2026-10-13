@@ -18,6 +18,7 @@
 {{end}}{{if .MoreChatsHref}}<a class="more" href="{{.MoreChatsHref}}">Show more chats</a>{{end}}{{end}}{{end}}
 
 {{define "results"}}{{if .Person}}<div class="results__person"><h2 class="results__heading">Everything from {{.Person}}</h2><a class="results__back" href="{{.AllHref}}">All results</a></div>
+{{end}}{{with .Filters}}{{template "filters" .}}
 {{end}}{{if or .Chats .People}}<h2 class="results__heading">Chats and people</h2>
 {{range .Chats}}<a class="name-row" href="{{.Href}}"><span class="avatar" aria-hidden="true">{{.Initials}}</span><span class="row__body"><span class="row__name">{{template "pieces" .Title}}</span><span class="row__preview">{{.Detail}}</span></span></a>
 {{end}}{{range .People}}<a class="name-row" href="{{.Href}}"><span class="avatar avatar--person" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg></span><span class="row__body"><span class="row__name">{{template "pieces" .Name}}</span><span class="row__preview row__preview--accent">Everything from this person, in any chat</span></span></a>
@@ -30,3 +31,14 @@
 {{end}}{{end}}
 
 {{define "pieces"}}{{range .}}{{if .Mark}}<mark class="hit">{{.Text}}</mark>{{else}}{{.Text}}{{end}}{{end}}{{end}}
+
+{{define "filters"}}<div class="filters"><span class="filters__sorts"><a href="{{.BestHref}}" class="filters__sort{{if not .Newest}} filters__sort--on{{end}}">Best match</a><a href="{{.NewestHref}}" class="filters__sort{{if .Newest}} filters__sort--on{{end}}">Newest first</a></span>
+<details class="filters__more"{{if .Active}} open{{end}}><summary class="filters__summary">Filters{{if .Active}} ({{.Active}}){{end}}</summary>
+<form class="filters__form" method="get" action="{{.Action}}"><input type="hidden" name="q" value="{{.Query}}">{{if .Newest}}<input type="hidden" name="sort" value="newest">{{end}}
+<label class="choice"><input type="checkbox" name="files" value="1"{{if .Files}} checked{{end}}> With attachments</label>
+<label class="choice"><input type="checkbox" name="deleted" value="1"{{if .Deleted}} checked{{end}}> Deleted at source</label>
+<label class="choice"><input type="checkbox" name="service" value="1"{{if .Service}} checked{{end}}> Joins, calls and pins too</label>
+<div class="filters__dates"><label>From <input type="date" name="from" value="{{.From}}"></label><label>To <input type="date" name="to" value="{{.To}}"></label></div>
+<div class="filters__actions"><button class="button button--quiet" type="submit">Apply</button>{{if .Active}}<a href="{{.ClearHref}}">Clear filters</a>{{end}}</div>
+</form>
+</details></div>{{end}}

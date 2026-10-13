@@ -1,5 +1,8 @@
 import { Controller } from "./stimulus.js"
 
+// The filters a search keeps while the text changes.
+const filters = ["sort", "files", "deleted", "service", "from", "to"]
+
 // Searches as the owner types. The form works without this controller; with
 // it, the left column is replaced by results a moment after typing stops,
 // and the address keeps the search so a reload or the back button returns
@@ -33,6 +36,10 @@ export default class extends Controller {
     const q = this.inputTarget.value
     const url = new URL(this.resultsValue, window.location.origin)
     url.searchParams.set("q", q)
+    const current = new URLSearchParams(window.location.search)
+    for (const name of filters) {
+      if (current.has(name)) url.searchParams.set(name, current.get(name))
+    }
     this.pending?.abort()
     this.pending = new AbortController()
     let response
