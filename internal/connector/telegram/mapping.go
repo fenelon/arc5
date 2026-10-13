@@ -47,7 +47,10 @@ func (e *entities) add(users []tg.UserClass, chats []tg.ChatClass) {
 		case *tg.Channel:
 			e.channels[c.ID] = c
 		case *tg.ChannelForbidden:
-			e.titles[fmt.Sprintf("channel:%d", c.ID)] = c.Title
+			// Still a channel with an access hash, which requests and the
+			// chat list's paging need, but one the owner can no longer read.
+			e.channels[c.ID] = &tg.Channel{ID: c.ID, AccessHash: c.AccessHash, Title: c.Title, Broadcast: c.Broadcast,
+				Megagroup: c.Megagroup, Left: true, Photo: &tg.ChatPhotoEmpty{}}
 		}
 	}
 }

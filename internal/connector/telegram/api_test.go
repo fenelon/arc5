@@ -233,3 +233,26 @@ func TestErrorKinds(t *testing.T) {
 		}
 	}
 }
+
+// Review finding: a page ending on a channel the owner was removed from had
+// no next page, so the chats after it were never listed.
+func TestDialogsPageEndingOnAForbiddenChannel(t *testing.T) {
+	slice := &tg.MessagesDialogsSlice{
+		Count:    300,
+		Dialogs:  []tg.DialogClass{&tg.Dialog{Peer: &tg.PeerChannel{ChannelID: 30}, TopMessage: 5}},
+		Messages: []tg.MessageClass{&tg.Message{ID: 5, PeerID: &tg.PeerChannel{ChannelID: 30}, Date: 900}},
+		Chats:    []tg.ChatClass{&tg.ChannelForbidden{ID: 30, AccessHash: 31, Title: "Gone", Megagroup: true}},
+	}
+	inv := &fakeInvoker{answer: func(bin.Encoder) (bin.Encoder, error) { return slice, nil }}
+	page, err := newClient(inv, credentials{}).Dialogs(context.Background(), dialogOffset{})
+	if err != nil || page.Next == nil {
+		t.Fatalf("next = %+v, %v", page.Next, err)
+	}
+	if p, ok := page.Next.Peer.(*tg.InputPeerChannel); !ok || p.ChannelID != 30 || p.AccessHash != 31 {
+		t.Errorf("next peer = %#v", page.Next.Peer)
+	}
+	e := newEntities(nil, slice.Chats)
+	if c, ok := e.chat(&tg.PeerChannel{ChannelID: 30}, self); !ok || c.Kind != "group" || c.Title != "Gone" {
+		t.Errorf("the forbidden supergroup as a chat = %+v, %v", c, ok)
+	}
+}
