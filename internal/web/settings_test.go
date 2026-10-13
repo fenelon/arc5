@@ -11,6 +11,7 @@ import (
 )
 
 func TestTopBarLinksToSettings(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.account("Personal", "telegram")
@@ -26,6 +27,7 @@ func TestTopBarLinksToSettings(t *testing.T) {
 }
 
 func TestSettingsPage(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	body := s.page("/settings")
@@ -48,6 +50,7 @@ func TestSettingsPage(t *testing.T) {
 }
 
 func TestSettingsAppearance(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	if rec := s.post("/settings/appearance", url.Values{"theme": {"dark"}}); !redirectsTo(rec, "/settings?saved=appearance") {
@@ -68,6 +71,7 @@ func TestSettingsAppearance(t *testing.T) {
 }
 
 func TestSettingsLanguages(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	rec := s.post("/settings/languages", url.Values{"lang": {"ru", "en"}})
@@ -94,6 +98,7 @@ func TestSettingsLanguages(t *testing.T) {
 }
 
 func TestSettingsAttachmentLimit(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	if rec := s.post("/settings/attachments", url.Values{"limit_mb": {"10"}}); !redirectsTo(rec, "/settings?saved=attachments#attachments") {
@@ -115,6 +120,7 @@ func TestSettingsAttachmentLimit(t *testing.T) {
 }
 
 func TestSettingsPassword(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	other := &site{t: t, store: s.store, srv: s.srv, cookies: map[string]*http.Cookie{}}
@@ -151,6 +157,7 @@ func TestSettingsPassword(t *testing.T) {
 }
 
 func TestSettingsPasswordFromTheEnvironment(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "from-env")
 	if rec := s.post("/login", url.Values{"password": {"from-env"}}); !redirectsTo(rec, "/") {
 		t.Fatalf("login: %d", rec.Code)
@@ -166,6 +173,7 @@ func TestSettingsPasswordFromTheEnvironment(t *testing.T) {
 
 // The picker remembers the last source opened, for Settings, Sources and home.
 func TestPickerRemembersTheSource(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	personal := s.account("Personal", "telegram")

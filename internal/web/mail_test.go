@@ -1,7 +1,13 @@
 package web
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"sync"
+
+	"github.com/fenelon/arc5/internal/archive"
+	"github.com/fenelon/arc5/internal/indexer"
 	"net/http"
 	"strings"
 	"testing"
@@ -18,15 +24,50 @@ type mailSite struct {
 	box int64
 }
 
+// demoArchive is a data folder holding the demo archive, written once for
+// the package's tests; each mail site works on its own copy.
+var demoArchive = sync.OnceValues(func() (string, error) {
+	dir, err := os.MkdirTemp("", "arc5-web-demo-")
+	if err != nil {
+		return "", err
+	}
+	store, err := archive.Open(dir)
+	if err != nil {
+		return "", err
+	}
+	index, err := indexer.Load(store) // so the sample messages are indexed as they are written
+	if err != nil {
+		store.Close()
+		return "", err
+	}
+	index.Logf = func(string, ...any) {}
+	_, err = demo.Seed(store)
+	index.Wait()
+	return dir, errors.Join(err, store.Close())
+})
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if dir, err := demoArchive(); err == nil {
+		os.RemoveAll(dir)
+	}
+	os.Exit(code)
+}
+
 func newMailSite(t *testing.T) *mailSite {
 	t.Helper()
-	s := newSite(t, "")
+	template, err := demoArchive()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.CopyFS(dir, os.DirFS(template)); err != nil {
+		t.Fatal(err)
+	}
+	s := newSiteIn(t, dir, "")
 	s.signIn()
 	demo.Register(s.reg)
 	demo.RegisterMail(s.reg)
-	if _, err := demo.Seed(s.store); err != nil {
-		t.Fatal(err)
-	}
 	s.srv.deps.Now = func() time.Time { return time.Date(2026, time.October, 13, 12, 0, 0, 0, time.UTC) }
 	m := &mailSite{site: s}
 	accounts, _ := s.store.Accounts()
@@ -60,6 +101,7 @@ func (m *mailSite) folder(name string) int64 {
 }
 
 func TestMailInbox(t *testing.T) {
+	t.Parallel()
 	m := newMailSite(t)
 	body := m.page(fmt.Sprintf("/s/%d", m.box))
 	has(t, body,
@@ -92,6 +134,7 @@ func TestMailInbox(t *testing.T) {
 }
 
 func TestMailFolders(t *testing.T) {
+	t.Parallel()
 	m := newMailSite(t)
 	sent := m.page(fmt.Sprintf("/s/%d?folder=sent", m.box))
 	has(t, sent, `<h1 class="mail-head__title">Sent</h1>`, "Cena el sábado", "Deposit for Calle Sol 14")
@@ -118,6 +161,7 @@ func TestMailFolders(t *testing.T) {
 }
 
 func TestMailFilters(t *testing.T) {
+	t.Parallel()
 	m := newMailSite(t)
 	files := m.page(fmt.Sprintf("/s/%d?folder=inbox&files=1", m.box))
 	has(t, files, "Monday planning, room 4", "Fotos de Valencia", "Your tickets for 11 July",
@@ -135,6 +179,7 @@ func TestMailFilters(t *testing.T) {
 }
 
 func TestMailPaging(t *testing.T) {
+	t.Parallel()
 	m := newMailSite(t)
 	sink := connector.NewSink(m.store, m.box, nil, func(connector.Progress) {})
 	for i := range 60 {
@@ -159,6 +204,7 @@ func TestMailPaging(t *testing.T) {
 }
 
 func TestEverythingAtOnceMail(t *testing.T) {
+	t.Parallel()
 	m := newMailSite(t)
 	body := m.page("/s/mail")
 	has(t, body, `<div class="folders__name">Everything at once</div>`, `href="/s/mail?folder=sent"`, "Cena el sábado",
@@ -170,6 +216,7 @@ func TestEverythingAtOnceMail(t *testing.T) {
 }
 
 func TestMailShowsHostileTextAsText(t *testing.T) {
+	t.Parallel()
 	m := newMailSite(t)
 	sink := connector.NewSink(m.store, m.box, nil, func(connector.Progress) {})
 	raw := "From: \"<img src=x onerror=alert(1)>\" <evil@example.com>\r\nSubject: <script>alert(2)</script> offer\r\nMessage-ID: <evil@example.com>\r\nDate: Mon, 12 Oct 2026 10:00:00 +0000\r\nContent-Type: text/html\r\n\r\n<p>Click <a href=\"javascript:alert(3)\">here</a><script>alert(4)</script></p>\r\n"

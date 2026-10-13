@@ -11,6 +11,7 @@ import (
 )
 
 func TestThreadView(t *testing.T) {
+	t.Parallel()
 	m := newMailSite(t)
 	planning := m.thread("Monday planning, room 4")
 	body := m.page(fmt.Sprintf("/s/%d/c/%d", m.box, planning))
@@ -57,6 +58,7 @@ func TestThreadView(t *testing.T) {
 
 // A file still waiting to be taken from its message can be asked for.
 func TestWaitingFileCanBeFetched(t *testing.T) {
+	t.Parallel()
 	m := newMailSite(t)
 	if err := m.store.UpsertChat(m.box, model.Chat{SourceID: "thread:wait@x", Kind: model.ChatThread, Title: "Waiting"}); err != nil {
 		t.Fatal(err)
@@ -70,6 +72,7 @@ func TestWaitingFileCanBeFetched(t *testing.T) {
 }
 
 func TestThreadFoldsQuotes(t *testing.T) {
+	t.Parallel()
 	m := newMailSite(t)
 	body := m.page(fmt.Sprintf("/s/%d/c/%d", m.box, m.thread("Отчёт о походе и расходы")))
 	has(t, body, "Всё сходится, спасибо!",
@@ -80,6 +83,7 @@ func TestThreadFoldsQuotes(t *testing.T) {
 }
 
 func TestThreadOpenedFromSearch(t *testing.T) {
+	t.Parallel()
 	m := newMailSite(t)
 	planning := m.thread("Monday planning, room 4")
 	var first int64
@@ -95,6 +99,7 @@ func TestThreadOpenedFromSearch(t *testing.T) {
 }
 
 func TestOriginalDownload(t *testing.T) {
+	t.Parallel()
 	m := newMailSite(t)
 	var id int64
 	m.store.Reader().QueryRow(`SELECT id FROM messages WHERE source_id = 'mp-4@example.com'`).Scan(&id)

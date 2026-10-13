@@ -24,6 +24,7 @@ func order(t *testing.T, body string, texts ...string) []int {
 }
 
 func TestSearchFilters(t *testing.T) {
+	t.Parallel()
 	m := newMarinaSite(t)
 	m.say(m.acc, "family", "2", "Marina joined the group", noon, func(msg *model.Message) { msg.Kind = model.KindService })
 	path := func(query string) string { return fmt.Sprintf("/s/%d?q=marina%s", m.acc, query) }

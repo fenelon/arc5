@@ -9,6 +9,7 @@ import (
 )
 
 func TestMailSearch(t *testing.T) {
+	t.Parallel()
 	m := newMailSite(t)
 	planning := m.thread("Monday planning, room 4")
 	body := m.page(fmt.Sprintf("/s/%d?q=projector", m.box))
@@ -40,6 +41,7 @@ func TestMailSearch(t *testing.T) {
 }
 
 func TestChooseFolders(t *testing.T) {
+	t.Parallel()
 	m := newMailSite(t)
 	page := m.page(fmt.Sprintf("/sources/%d/chats", m.box))
 	has(t, page, "<h1>Folders of Home mail</h1>", "Ticked folders are archived.",

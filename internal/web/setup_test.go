@@ -17,6 +17,7 @@ import (
 )
 
 func TestAddASource(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	s.reg.Register(connector.Info{Name: "fake", Title: "Fake", Display: connector.DisplayChats}, func() connector.Connector { return fakeConnector{} })
@@ -88,6 +89,7 @@ func TestAddASource(t *testing.T) {
 }
 
 func TestLogInAgain(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.fakeAccount("Personal")
@@ -107,6 +109,7 @@ func TestLogInAgain(t *testing.T) {
 }
 
 func TestSetupCanBeCancelledAndExpires(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.fakeAccount("Personal")
@@ -185,6 +188,7 @@ func (s *site) tab() *site {
 // Review Focus 4: a login that finishes while the source is being removed
 // must not leave its session behind.
 func TestRemovingWaitsForALoginInFlight(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc, held := s.heldAccount("code")
@@ -225,6 +229,7 @@ func TestRemovingWaitsForALoginInFlight(t *testing.T) {
 // source's step finishing while the other's page is read must not race. Run
 // with -race; nothing orders the two requests.
 func TestLoginsOfTwoSourcesAtOnce(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	held, h := s.heldAccount("phone")
@@ -250,6 +255,7 @@ func TestLoginsOfTwoSourcesAtOnce(t *testing.T) {
 }
 
 func TestSecretFieldsSayUnchangedOnlyWhenSomethingIsKept(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	acc := s.fakeAccount("Personal")
@@ -272,6 +278,7 @@ func TestSecretFieldsSayUnchangedOnlyWhenSomethingIsKept(t *testing.T) {
 }
 
 func TestTheWelcomePageOffersEachKindOfSource(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	s.reg.Register(connector.Info{Name: "telegram", Title: "Telegram", Display: connector.DisplayChats}, func() connector.Connector { return fakeConnector{} })
@@ -285,6 +292,7 @@ func TestTheWelcomePageOffersEachKindOfSource(t *testing.T) {
 }
 
 func TestAddingASourceStartsWithTheChosenKind(t *testing.T) {
+	t.Parallel()
 	s := newSite(t, "")
 	s.signIn()
 	s.reg.Register(connector.Info{Name: "fake", Title: "Fake", Display: connector.DisplayChats}, func() connector.Connector { return fakeConnector{} })
