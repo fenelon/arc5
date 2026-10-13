@@ -13,6 +13,9 @@ milestone stands and what is still undecided.
   of the same step and report it. This covers ordinary pushes only; a
   force-push or anything that rewrites remote history still needs an explicit
   yes. (The owner said "push without asking, continue" on 2026-10-12.)
+- **No attribution.** Commit messages, merges and pull requests carry no
+  `Co-Authored-By`, `Claude-Session` or "Generated with" lines; the history
+  shows only the owner (asked 2026-10-13).
 - **Process.** Spec, then one plan per milestone, then native execution with
   `superpowers:executing-plans`: feature branch, test first for every task,
   one fresh whole-branch review at the end, fix important findings test-first,
