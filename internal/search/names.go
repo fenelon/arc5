@@ -20,6 +20,7 @@ type ChatMatch struct {
 	Kind      model.ChatKind
 	Title     []Fragment // the title, with the matched words marked
 	LastAt    time.Time  // when its newest message was sent
+	AvatarSHA string     // its picture in the media store, or ""
 }
 
 // PersonMatch is a sender whose name or username the query matched.
@@ -28,6 +29,7 @@ type PersonMatch struct {
 	AccountID int64
 	Name      []Fragment // the display name, with the matched words marked
 	Username  string
+	AvatarSHA string // their picture in the media store, or ""
 }
 
 // Names is what a query found among chat titles and people's names.
@@ -73,7 +75,7 @@ func (s *Searcher) Names(ctx context.Context, text string, accountIDs []int64, l
 	var chats []rankedChat
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT c.id, c.account_id, c.kind, c.title,
-		       (SELECT MAX(m.sent_at) FROM messages m WHERE m.chat_id = c.id)
+		       (SELECT MAX(m.sent_at) FROM messages m WHERE m.chat_id = c.id), c.avatar_sha256
 		FROM chats c WHERE 1`+scope, args...)
 	if err != nil {
 		return Names{}, err
@@ -86,7 +88,7 @@ func (s *Searcher) Names(ctx context.Context, text string, accountIDs []int64, l
 			title string
 			last  sql.NullInt64
 		)
-		if err := rows.Scan(&c.ChatID, &c.AccountID, &kind, &title, &last); err != nil {
+		if err := rows.Scan(&c.ChatID, &c.AccountID, &kind, &title, &last, &c.AvatarSHA); err != nil {
 			return Names{}, err
 		}
 		if !last.Valid {
@@ -120,7 +122,7 @@ func (s *Searcher) Names(ctx context.Context, text string, accountIDs []int64, l
 	}
 	var people []rankedPerson
 	rows, err = s.db.QueryContext(ctx, `
-		SELECT id, account_id, display_name, username FROM senders
+		SELECT id, account_id, display_name, username, avatar_sha256 FROM senders
 		WHERE (display_name != '' OR username != '')`+scope, args...)
 	if err != nil {
 		return Names{}, err
@@ -128,7 +130,7 @@ func (s *Searcher) Names(ctx context.Context, text string, accountIDs []int64, l
 	defer rows.Close()
 	for rows.Next() {
 		var p rankedPerson
-		if err := rows.Scan(&p.SenderID, &p.AccountID, &p.name, &p.Username); err != nil {
+		if err := rows.Scan(&p.SenderID, &p.AccountID, &p.name, &p.Username, &p.AvatarSHA); err != nil {
 			return Names{}, err
 		}
 		whole, ok := s.analyzer.nameMatches(p.name+" "+p.Username, words)

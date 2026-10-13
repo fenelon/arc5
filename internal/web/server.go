@@ -132,6 +132,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /settings/attachments", s.signedIn(s.saveAttachments))
 	s.mux.Handle("POST /settings/password", s.signedIn(s.savePassword))
 	s.mux.Handle("GET /media/{id}", s.signedIn(s.serveMedia))
+	s.mux.Handle("GET /avatars/{sha}", s.signedIn(s.serveAvatar))
 	s.mux.Handle("POST /media/{id}/fetch", s.signedIn(s.fetchMedia))
 }
 

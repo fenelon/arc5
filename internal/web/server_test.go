@@ -372,7 +372,7 @@ func TestEveryRouteNeedsASessionAndEveryChangeTheToken(t *testing.T) {
 	chat := s.chatID(acc, "Dan")
 	gets := []string{"/", "/s/chats", fmt.Sprintf("/s/%d", acc), fmt.Sprintf("/s/%d/c/%d", acc, chat), fmt.Sprintf("/s/%d/results?q=x", acc),
 		"/media/1", "/sources", "/sources/new", fmt.Sprintf("/sources/%d", acc), fmt.Sprintf("/sources/%d/chats", acc),
-		fmt.Sprintf("/sources/%d/login", acc), "/settings"}
+		fmt.Sprintf("/sources/%d/login", acc), "/settings", "/avatars/" + strings.Repeat("a", 64)}
 	posts := []string{"/logout", "/media/1/fetch", "/sources/new", fmt.Sprintf("/sources/%d/name", acc), fmt.Sprintf("/sources/%d/settings", acc),
 		fmt.Sprintf("/sources/%d/signout", acc), fmt.Sprintf("/sources/%d/remove", acc), fmt.Sprintf("/sources/%d/chats", acc),
 		fmt.Sprintf("/sources/%d/login", acc), fmt.Sprintf("/sources/%d/login/cancel", acc),

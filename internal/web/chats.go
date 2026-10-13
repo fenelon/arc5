@@ -26,6 +26,7 @@ type ChatRow struct {
 	Href     string
 	Title    string
 	Initials string
+	Avatar   string // the chat's picture, or "" for initials
 	Preview  string
 	When     string
 	Current  bool
@@ -108,7 +109,7 @@ func (s *Server) chatRows(sel selection, currentChat int64, count int) ([]ChatRo
 	rows := make([]ChatRow, len(list))
 	for i, c := range list {
 		rows[i] = ChatRow{
-			Href: fmt.Sprintf("/s/%s/c/%d", sel.Key, c.ID), Title: c.Title, Initials: initials(c.Title),
+			Href: fmt.Sprintf("/s/%s/c/%d", sel.Key, c.ID), Title: c.Title, Initials: initials(c.Title), Avatar: avatarURL(c.AvatarSHA),
 			Preview: preview(c), When: s.when(c.LastAt), Current: c.ID == currentChat,
 		}
 	}
