@@ -35,8 +35,8 @@ func (r *run) backfill(ctx context.Context) error {
 	}
 	for done, chat := range chats {
 		r.sink.ReportProgress(connector.Progress{Phase: connector.PhaseBackfill, ChatsDone: done, ChatsTotal: len(chats)})
-		if err := r.backfillChat(ctx, chat); err != nil {
-			return err
+		if err := r.backfillChat(ctx, chat); err != nil && !refusedChat(err) {
+			return err // a chat Telegram refuses is skipped; the others carry on
 		}
 	}
 	r.sink.ReportProgress(connector.Progress{Phase: connector.PhaseLive, ChatsDone: len(chats), ChatsTotal: len(chats)})

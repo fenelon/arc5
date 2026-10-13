@@ -35,7 +35,8 @@ type history struct {
 	counts   map[string]int
 	calls    []string // "chat offset min limit"
 	failNext error
-	failGaps error // the answer to every request with a lower bound
+	failGaps error            // the answer to every request with a lower bound
+	refuse   map[string]error // chats Telegram will not serve
 }
 
 var day0 = time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)
@@ -56,6 +57,9 @@ func (h *history) fetch(peer tg.InputPeerClass, offsetID, minID, limit int) (his
 	h.calls = append(h.calls, fmt.Sprintf("%s %d %d %d", chat, offsetID, minID, limit))
 	if err := h.failNext; err != nil {
 		h.failNext = nil
+		return historyPage{}, err
+	}
+	if err := h.refuse[chat]; err != nil {
 		return historyPage{}, err
 	}
 	if minID > 0 && h.failGaps != nil {
@@ -250,5 +254,16 @@ func TestBackfillPaused(t *testing.T) {
 	}
 	if p := sink.lastProgress(); !strings.Contains(p.Detail, "paused") {
 		t.Errorf("progress = %+v", p)
+	}
+}
+
+// Review finding: one chat Telegram refuses (removed from a channel) ended
+// the run, on every run.
+func TestBackfillSkipsAChatTelegramRefuses(t *testing.T) {
+	h := &history{counts: map[string]int{"user:1": 5, "chat:10": 3}, refuse: map[string]error{"user:1": tgerr.New(400, "CHANNEL_PRIVATE")}}
+	sink := newMemSink()
+	backfilled(t, h, sink, signedIn(t), nil)
+	if got := sink.texts("chat:10"); len(got) != 3 {
+		t.Errorf("the chat after the refused one = %v", got)
 	}
 }
