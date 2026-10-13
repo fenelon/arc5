@@ -64,6 +64,9 @@ type client interface {
 	Search(ctx context.Context, from, to uint32, since time.Time) ([]uint32, error)
 	Headers(ctx context.Context, uids []uint32) ([]header, error)
 	Fetch(ctx context.Context, uid uint32, headersOnly bool) ([]byte, error)
+	// FetchMany fetches whole messages in one request, by UID. A message
+	// gone from the folder is left out.
+	FetchMany(ctx context.Context, uids []uint32) (map[uint32][]byte, error)
 	// Idle waits until the server reports a change to the selected folder,
 	// or wait has passed.
 	Idle(ctx context.Context, wait time.Duration) error
@@ -304,6 +307,22 @@ func (ic *imapClient) Fetch(ctx context.Context, uid uint32, headersOnly bool) (
 		}
 	}
 	return nil, errGone
+}
+
+func (ic *imapClient) FetchMany(ctx context.Context, uids []uint32) (map[uint32][]byte, error) {
+	defer ic.watch(ctx)()
+	section := &imap.FetchItemBodySection{Peek: true}
+	msgs, err := ic.c.Fetch(uidSet(uids), &imap.FetchOptions{UID: true, BodySection: []*imap.FetchItemBodySection{section}}).Collect()
+	if err != nil {
+		return nil, ctxErr(ctx, refused(err))
+	}
+	out := make(map[uint32][]byte, len(msgs))
+	for _, m := range msgs {
+		if body := m.FindBodySection(section); body != nil {
+			out[uint32(m.UID)] = body
+		}
+	}
+	return out, nil
 }
 
 // errGone is a message that left the folder before it could be fetched.

@@ -677,3 +677,43 @@ func TestProgress(t *testing.T) {
 		t.Errorf("last progress = %+v", last)
 	}
 }
+
+// History fetches a batch of messages in one request rather than one
+// request each: a round trip per message made a large mailbox take hours.
+func TestHistoryFetchesInBatches(t *testing.T) {
+	a := newArchived(t)
+	srv := newFakeServer("INBOX")
+	for i := range 120 {
+		srv.add("INBOX", msg(fmt.Sprintf("m%d@x", i), "a@example.com", "Hi", "hello"), now.Add(-time.Duration(120-i)*time.Minute))
+	}
+	state := newMemState()
+	login(state, "app-password")
+	r := start(t, a, srv, state, nil, time.Hour)
+	r.settle()
+	if n := a.count(t); n != 120 {
+		t.Fatalf("%d messages stored, want 120", n)
+	}
+	if got := srv.fetchRequests(); len(got) > 3 {
+		t.Errorf("%d fetch requests for 120 messages, want at most 3", len(got))
+	}
+}
+
+// Inbox and Sent fill first, and the folders take turns, so the Inbox does
+// not wait for All Mail to finish.
+func TestFoldersTakeTurns(t *testing.T) {
+	a := newArchived(t)
+	srv := newFakeServer(gmailFolders...)
+	for i := range 2 * batch {
+		at := now.Add(-time.Duration(2*batch-i) * time.Minute)
+		srv.add("INBOX", msg(fmt.Sprintf("in%d@x", i), "a@example.com", "In", "in"), at)
+		srv.add("[Gmail]/All Mail", msg(fmt.Sprintf("all%d@x", i), "a@example.com", "All", "all"), at)
+	}
+	state := newMemState()
+	login(state, "app-password")
+	r := start(t, a, srv, state, nil, time.Hour)
+	r.settle()
+	want := []string{"INBOX", "[Gmail]/All Mail", "INBOX", "[Gmail]/All Mail"}
+	if got := srv.fetchRequests(); !slices.Equal(got, want) {
+		t.Errorf("fetch requests by folder = %v, want %v", got, want)
+	}
+}
