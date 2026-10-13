@@ -60,7 +60,9 @@ arc5 signs in to Telegram as you, the way a desktop app does, and keeps a copy
 of your chats. It never sends, edits or deletes anything.
 
 1. Create API keys of your own at <https://my.telegram.org>, under "API
-   development tools". Any app name will do.
+   development tools". The form answers only "ERROR" when it dislikes
+   something: use a title of letters only (such as `ArcFive`; `Arc5` was
+   refused), choose Desktop, leave the URL empty, and turn off any VPN.
 2. In arc5, open Sources, choose "Add a source", then Telegram. Enter the API
    ID and hash, your phone number, the code Telegram sends, and your two-step
    password if you have one.

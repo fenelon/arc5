@@ -57,7 +57,8 @@ func (s *setup) keysStep() connector.Step {
 	st := connector.Step{
 		Title: stepKeys,
 		Help: "arc5 signs in as you with API keys of your own. Create them at my.telegram.org under " +
-			"\"API development tools\" (any app name will do), then copy the App api_id and App api_hash here.",
+			"\"API development tools\", then copy the App api_id and App api_hash here. If that form answers only " +
+			"\"ERROR\", use a title of letters only (such as ArcFive), choose Desktop and leave the URL empty.",
 		Fields: []connector.Field{
 			{Name: "api_id", Label: "API ID", Kind: connector.FieldNumber},
 			{Name: "api_hash", Label: "API hash", Kind: connector.FieldSecret},
