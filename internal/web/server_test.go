@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,15 +17,40 @@ import (
 )
 
 type fakeRunner struct {
-	status    []connector.Status
-	requested []int64
-	err       error
+	mu         sync.Mutex
+	status     []connector.Status
+	requested  []int64
+	restarted  []int64
+	signedOut  []int64
+	err        error
+	signOutErr error
 }
 
-func (f *fakeRunner) Status() []connector.Status { return f.status }
+func (f *fakeRunner) Status() []connector.Status {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]connector.Status(nil), f.status...)
+}
+
 func (f *fakeRunner) RequestMedia(id int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.requested = append(f.requested, id)
 	return f.err
+}
+
+func (f *fakeRunner) Restart(id int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.restarted = append(f.restarted, id)
+	return nil
+}
+
+func (f *fakeRunner) SignOut(_ context.Context, id int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.signedOut = append(f.signedOut, id)
+	return f.signOutErr
 }
 
 // site is a server with a browser's memory: it keeps cookies and the CSRF

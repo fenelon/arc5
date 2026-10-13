@@ -3,14 +3,55 @@
 {{template "topbar" .}}
 {{template "banner" .}}
 <main class="plain plain--wide">
-<h1>Sources</h1>
-<p>Each source is one account arc5 keeps a copy of. Its type decides how it is shown: messengers as chats, mailboxes as mail.</p>
+<div class="page-head"><h1>Sources</h1></div>
+{{if eq .Saved "removed"}}<p class="saved" role="status">Removed. Its messages stay in the archive.</p>{{end}}
 {{range .Groups}}<h2 class="group-heading">{{.Title}}</h2>
 <div class="tiles">
-{{range .Tiles}}<a class="tile tile--wide{{if .Warn}} tile--warn{{end}}" href="{{.Href}}">{{template "logo" .Logo}}<span class="tile__text"><span class="tile__name">{{.Name}}</span><span class="tile__sub">{{.Service}}. {{.Detail}}</span></span>{{template "state" .}}</a>
+{{range .Tiles}}<a class="tile tile--wide{{if .Current}} tile--current{{end}}{{if .Warn}} tile--warn{{end}}" href="{{.Href}}"{{if .Current}} aria-current="true"{{end}}>{{template "logo" .Logo}}<span class="tile__text"><span class="tile__name">{{.Name}}</span><span class="tile__sub">{{.Detail}}</span></span>{{template "state" .}}</a>
 {{end}}</div>
 {{else}}<p class="empty">No sources yet.</p>
 {{end}}
+{{with .Panel}}{{template "source-panel" (dict "P" . "Page" $)}}{{end}}
 </main>
 </body>
 </html>{{end}}
+
+{{define "source-panel"}}{{$p := .P}}{{$page := .Page}}<section class="panel" aria-labelledby="panel-title">
+<header class="panel__head">{{template "logo" $p.Logo}}<h2 class="panel__title" id="panel-title">Settings for {{$p.Name}}</h2><a class="panel__open" href="{{$p.OpenHref}}">Open its chats</a></header>
+{{if $page.Problem}}<p class="alert panel__note" role="alert">{{$page.Problem}}</p>
+{{else if eq $page.Saved "name" "settings"}}<p class="saved panel__note" role="status">Saved.{{if eq $page.Saved "settings"}} The source starts again with them.{{end}}</p>
+{{else if eq $page.Saved "signout"}}<p class="saved panel__note" role="status">Signed out. It stops archiving until you log in again.</p>
+{{end}}<div class="panel__grid">
+<div class="panel__cell">
+<h3 class="panel__label">Name</h3>
+<p class="panel__help">Shown in the source picker</p>
+<form class="inline-form" method="post" action="/sources/{{$p.ID}}/name"><input type="hidden" name="csrf" value="{{$page.CSRF}}"><div class="field"><label class="visually-hidden" for="source-name">Name</label><input id="source-name" name="name" value="{{$p.Name}}" maxlength="100" required></div><button class="button" type="submit">Rename</button></form>
+</div>
+<div class="panel__cell">
+<h3 class="panel__label">Chats</h3>
+<p class="panel__help">Private chats and groups are archived as they appear. Channels and bots only when you switch them on.</p>
+<p><a class="panel__link" href="{{$p.ChatsHref}}">Choose which of the {{$p.Chats}} chats are archived</a></p>
+</div>
+<div class="panel__cell">
+<h3 class="panel__label">State</h3>
+{{if $p.Progress}}<div class="progress-line"><span>Catching up on history</span><span>{{$p.Progress.Done}} of {{$p.Progress.Total}} chats</span></div>
+<progress class="progress" max="{{$p.Progress.Total}}" value="{{$p.Progress.Done}}">{{$p.Progress.Done}} of {{$p.Progress.Total}} chats</progress>
+{{else}}<p>{{$p.Status}}</p>
+{{end}}<p class="panel__help">New messages are saved the moment they arrive, whatever else it is doing.</p>
+</div>
+</div>
+{{if $p.Removed}}<p class="panel__removed">This source was removed on {{$p.Removed}}. Its messages stay in the archive and in search; nothing is fetched for it any more.</p>
+{{else}}{{if $p.Fields}}<form class="panel__settings" method="post" action="/sources/{{$p.ID}}/settings"><input type="hidden" name="csrf" value="{{$page.CSRF}}">
+<div class="panel__fields">{{range $p.Fields}}{{template "setting-field" .}}{{end}}</div>
+<button class="button" type="submit">Save</button>
+</form>
+{{end}}<footer class="panel__foot">{{if $p.CanSignOut}}<form method="post" action="/sources/{{$p.ID}}/signout"><input type="hidden" name="csrf" value="{{$page.CSRF}}"><button class="link-button link-button--accent" type="submit">Sign this source out</button></form>{{end}}
+<details class="confirm"><summary class="link-button link-button--warn">Remove this source and keep its archive</summary>
+<div class="confirm__body"><p>{{$p.Name}} stops archiving and its login is forgotten. Its messages stay in the archive and in search.</p>
+<form method="post" action="/sources/{{$p.ID}}/remove"><input type="hidden" name="csrf" value="{{$page.CSRF}}"><button class="button button--warn" type="submit">Remove {{$p.Name}}</button></form></div></details>
+</footer>{{end}}
+</section>{{end}}
+
+{{define "setting-field"}}{{if eq .Kind "bool"}}<div class="setting setting--bool"><label class="choice"><input id="{{.ID}}" name="{{.Name}}" type="checkbox" value="true"{{if .Checked}} checked{{end}}> {{.Label}}</label>{{if .Help}}<p class="panel__help">{{.Help}}</p>{{end}}</div>
+{{else}}<div class="field setting"><label for="{{.ID}}">{{.Label}}</label>{{if eq .Kind "choice"}}<select id="{{.ID}}" name="{{.Name}}">{{range .Choices}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Value}}</option>{{end}}</select>{{else if eq .Kind "secret"}}<input id="{{.ID}}" name="{{.Name}}" type="password" value="" autocomplete="off" placeholder="Unchanged">{{else if eq .Kind "number"}}<input id="{{.ID}}" name="{{.Name}}" type="number" value="{{.Value}}">{{else}}<input id="{{.ID}}" name="{{.Name}}" type="text" value="{{.Value}}">{{end}}{{if .Help}}<p class="panel__help">{{.Help}}</p>{{end}}</div>
+{{end}}{{end}}

@@ -3,6 +3,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
@@ -40,6 +41,11 @@ type Index interface {
 type Runner interface {
 	Status() []connector.Status
 	RequestMedia(attachmentID int64) error
+	// Restart stops an account's connector and starts it again if the
+	// account is enabled, after its settings change.
+	Restart(accountID int64) error
+	// SignOut has an account's connector end its session at the source.
+	SignOut(ctx context.Context, accountID int64) error
 }
 
 type Deps struct {
@@ -106,6 +112,11 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /s/{source}/c/{chat}", s.signedIn(s.conversationView))
 	s.mux.Handle("GET /s/{source}/results", s.signedIn(s.resultsFragment))
 	s.mux.Handle("GET /sources", s.signedIn(s.sourcesList))
+	s.mux.Handle("GET /sources/{id}", s.signedIn(s.sourceSettings))
+	s.mux.Handle("POST /sources/{id}/name", s.signedIn(s.renameSource))
+	s.mux.Handle("POST /sources/{id}/settings", s.signedIn(s.saveSourceSettings))
+	s.mux.Handle("POST /sources/{id}/signout", s.signedIn(s.signOutSource))
+	s.mux.Handle("POST /sources/{id}/remove", s.signedIn(s.removeSource))
 	s.mux.Handle("GET /settings", s.signedIn(s.settings))
 	s.mux.Handle("POST /settings/appearance", s.signedIn(s.saveAppearance))
 	s.mux.Handle("POST /settings/languages", s.signedIn(s.saveLanguages))

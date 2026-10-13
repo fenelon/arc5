@@ -187,8 +187,8 @@ func TestSourceStates(t *testing.T) {
 		{AccountID: ids["Paused"], State: connector.StatePaused, LastError: "disk full"},
 	}
 	body := s.page("/sources")
-	has(t, body, "Catching up on history, 3 of 9 chats", "Connecting", "Not connected: connection reset",
-		"Paused, the archive could not be written: disk full", "Switched off", "Not running",
+	has(t, body, "Telegram, catching up on history, 3 of 9 chats", "Telegram, connecting", "Telegram, not connected: connection reset",
+		"Telegram, paused, the archive could not be written: disk full", "Telegram, switched off", "Telegram, not running", "Telegram, live",
 		`aria-label="Live"`, `aria-label="Catching up on history"`)
 	if strings.Count(body, "tile--warn") != 2 {
 		t.Errorf("want the two failing sources drawn with the attention border, got %d", strings.Count(body, "tile--warn"))

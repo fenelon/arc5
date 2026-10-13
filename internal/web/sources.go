@@ -55,6 +55,9 @@ func (s *Server) sources() ([]source, error) {
 func describe(src *source, st connector.Status, running bool) {
 	set := func(state, label string) { src.State, src.StateLabel, src.Detail = state, label, label }
 	switch {
+	case !src.Account.RemovedAt.IsZero():
+		set("", "Removed")
+		return
 	case !src.Account.Enabled:
 		set(stateOffline, "Switched off")
 	case !running, st.State == connector.StateStopped:
@@ -115,14 +118,15 @@ type selection struct {
 }
 
 var kinds = []struct {
-	display connector.Display
-	key     string
-	title   string
-	one     string
-	many    string
+	display      connector.Display
+	key          string
+	title        string
+	sourcesTitle string // the group's heading on the Sources page
+	one          string
+	many         string
 }{
-	{connector.DisplayChats, "chats", "Messengers", "messenger", "messengers"},
-	{connector.DisplayMail, "mail", "Mail", "mailbox", "mailboxes"},
+	{connector.DisplayChats, "chats", "Messengers", "Messengers, shown as chats", "messenger", "messengers"},
+	{connector.DisplayMail, "mail", "Mail", "Mailboxes, shown as mail", "mailbox", "mailboxes"},
 }
 
 func (s *Server) selection(key string, all []source) (selection, bool) {
@@ -190,31 +194,4 @@ func (s *Server) chrome(r *http.Request, sess archive.Session, title string, all
 		}
 	}
 	return p
-}
-
-// sourcesPage lists every source with its state.
-type sourcesPage struct {
-	Page
-	Groups []PickerGroup
-}
-
-func (s *Server) sourcesList(w http.ResponseWriter, r *http.Request, sess archive.Session) {
-	all, err := s.sources()
-	if err != nil {
-		s.fail(w, err)
-		return
-	}
-	data := sourcesPage{Page: s.chrome(r, sess, "Sources", all, "")}
-	for _, k := range kinds {
-		group := PickerGroup{Title: k.title}
-		for _, src := range all {
-			if src.Info.Display == k.display {
-				group.Tiles = append(group.Tiles, src.tile(""))
-			}
-		}
-		if len(group.Tiles) > 0 {
-			data.Groups = append(data.Groups, group)
-		}
-	}
-	s.render(w, http.StatusOK, "sources", data)
 }
