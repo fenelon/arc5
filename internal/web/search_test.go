@@ -187,3 +187,16 @@ func TestSearchShowsHostileTextAsText(t *testing.T) {
 		has(t, body, escaped)
 	}
 }
+
+// The search box has a clear button of its own, shown while there is text:
+// the browser's own appears only on hover. Clearing leaves the search.
+func TestSearchHasAClearButton(t *testing.T) {
+	m := newMarinaSite(t)
+	clear := `<button class="search__clear" type="button" aria-label="Clear the search and leave it" data-search-target="clear" data-action="search#clear"`
+	has(t, m.page(fmt.Sprintf("/s/%d?q=marina", m.acc)), clear+`>`)
+	has(t, m.page(fmt.Sprintf("/s/%d", m.acc)), clear+` hidden>`)
+	body := m.get(m.srv.asset("js/search_controller.js")).Body.String()
+	if !strings.Contains(body, "leave()") {
+		t.Error("clearing does not leave the search")
+	}
+}

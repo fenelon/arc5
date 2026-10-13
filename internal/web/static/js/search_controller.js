@@ -8,7 +8,7 @@ const filters = ["sort", "files", "deleted", "service", "from", "to"]
 // and the address keeps the search so a reload or the back button returns
 // to it.
 export default class extends Controller {
-  static targets = ["input"]
+  static targets = ["input", "clear"]
   static values = { results: String }
 
   disconnect() {
@@ -17,6 +17,7 @@ export default class extends Controller {
   }
 
   type() {
+    this.clearTarget.hidden = this.inputTarget.value === ""
     clearTimeout(this.timer)
     this.timer = setTimeout(() => this.load(), 250)
   }
@@ -28,8 +29,26 @@ export default class extends Controller {
   }
 
   clear() {
+    clearTimeout(this.timer)
     this.inputTarget.value = ""
-    this.load()
+    this.clearTarget.hidden = true
+    this.inputTarget.focus()
+    this.leave()
+  }
+
+  // leave ends the search. A page the server drew with a search on it (its
+  // results, a person, or a chat opened from a hit with its words marked)
+  // is opened again without it; otherwise the chat list comes back in place.
+  leave() {
+    const here = new URL(window.location.href)
+    const searched = ["q", "page", "person", ...filters].some((name) => here.searchParams.has(name))
+    if (!searched) {
+      this.load()
+      return
+    }
+    for (const name of ["q", "page", "person", ...filters]) here.searchParams.delete(name)
+    this.pending?.abort()
+    window.location.assign(here)
   }
 
   async load() {
