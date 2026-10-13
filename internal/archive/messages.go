@@ -41,9 +41,23 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 			return nil, fmt.Errorf("%w: attachment kind %q", ErrInvalid, a.Kind)
 		}
 	}
+	for _, a := range m.Addresses {
+		if !a.Role.Valid() {
+			return nil, fmt.Errorf("%w: address role %q", ErrInvalid, a.Role)
+		}
+	}
 	raw, err := compress(m.Raw)
 	if err != nil {
 		return nil, err
+	}
+	// The original is written to the media store before the transaction, so
+	// the write lock is not held while a large file is synced. A failed
+	// transaction leaves an unreferenced file, as an interrupted download does.
+	original := ""
+	if len(m.Original) > 0 {
+		if original, _, err = s.storeFile(bytes.NewReader(m.Original)); err != nil {
+			return nil, err
+		}
 	}
 	text := clean(m.Text)
 	now := s.now().Unix()
@@ -83,10 +97,12 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 	case errors.Is(err, sql.ErrNoRows):
 		res, err := tx.Exec(`
 			INSERT INTO messages (chat_id, source_id, sender_id, kind, outgoing, sent_at, text,
-			                      reply_to_source_id, forwarded_from, edited_at, edit_dated, captured_at, raw)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			                      reply_to_source_id, forwarded_from, edited_at, edit_dated, captured_at, raw,
+			                      subject, original_sha256)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			chat, m.SourceID, sender, string(m.Kind), b2i(m.Outgoing), m.SentAt.Unix(), text,
-			m.ReplyToSourceID, clean(m.ForwardedFrom), nullUnix(incomingEdit), b2i(incomingEdit > 0), now, raw)
+			m.ReplyToSourceID, clean(m.ForwardedFrom), nullUnix(incomingEdit), b2i(incomingEdit > 0), now, raw,
+			clean(m.Subject), original)
 		if err != nil {
 			return nil, err
 		}
@@ -128,6 +144,26 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 				return nil, err
 			}
 		}
+	}
+
+	if original != "" {
+		if _, err := tx.Exec(`UPDATE messages SET original_sha256 = ? WHERE id = ? AND original_sha256 = ''`, original, id); err != nil {
+			return nil, err
+		}
+	}
+	if m.Subject != "" {
+		res, err := tx.Exec(`UPDATE messages SET subject = ? WHERE id = ? AND subject = ''`, clean(m.Subject), id)
+		if err != nil {
+			return nil, err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return nil, err
+		} else if n > 0 {
+			changed = true
+		}
+	}
+	if err := addAddresses(tx, id, m.Addresses); err != nil {
+		return nil, err
 	}
 
 	limit, err := mediaCap(tx)
@@ -196,6 +232,27 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 		return nil, err
 	}
 	return pending, tx.Commit()
+}
+
+// addAddresses records a message's mail addresses, numbered per role in the
+// order given. A message keeps the addresses of the first copy that had any.
+func addAddresses(tx *sql.Tx, messageID int64, addresses []model.Address) error {
+	if len(addresses) == 0 {
+		return nil
+	}
+	var stored int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM message_addresses WHERE message_id = ?`, messageID).Scan(&stored); err != nil || stored > 0 {
+		return err
+	}
+	position := map[model.AddressRole]int{}
+	for _, a := range addresses {
+		if _, err := tx.Exec(`INSERT INTO message_addresses (message_id, role, position, address, name) VALUES (?, ?, ?, ?, ?)`,
+			messageID, string(a.Role), position[a.Role], clean(a.Address), clean(a.Name)); err != nil {
+			return err
+		}
+		position[a.Role]++
+	}
+	return nil
 }
 
 // reasonReplaced explains a replaced attachment that was never downloaded.

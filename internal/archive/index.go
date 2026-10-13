@@ -109,9 +109,13 @@ func setInTx(tx *sql.Tx, key, value string) error {
 // attachment file names, replacing any earlier row.
 func indexMessage(tx *sql.Tx, a Analyzer, messageID int64) error {
 	var doc strings.Builder
-	var text string
-	if err := tx.QueryRow(`SELECT text FROM messages WHERE id = ?`, messageID).Scan(&text); err != nil {
+	var subject, text string
+	if err := tx.QueryRow(`SELECT subject, text FROM messages WHERE id = ?`, messageID).Scan(&subject, &text); err != nil {
 		return err
+	}
+	if subject != "" {
+		doc.WriteString(subject)
+		doc.WriteByte('\n')
 	}
 	doc.WriteString(text)
 
