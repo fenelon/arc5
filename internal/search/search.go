@@ -25,7 +25,7 @@ const (
 // Query is a search request. IDs are database IDs; zero means any.
 type Query struct {
 	Text           string
-	AccountID      int64
+	AccountIDs     []int64 // the accounts to search; nil means every account
 	ChatID         int64
 	SenderID       int64
 	From           time.Time // inclusive; zero means unbounded
@@ -44,7 +44,9 @@ type Hit struct {
 	AccountID  int64
 	ChatID     int64
 	ChatTitle  string
+	ChatKind   model.ChatKind
 	SenderName string
+	Outgoing   bool // sent by the account owner
 	Kind       model.MessageKind
 	SentAt     time.Time
 	Edited     bool
@@ -103,8 +105,8 @@ func (s *Searcher) Search(ctx context.Context, q Query) (Page, error) {
 			order = `bm25(messages_fts, 2.0, 1.0), m.sent_at DESC, m.id DESC`
 		}
 	}
-	if q.AccountID != 0 {
-		add(`c.account_id = ?`, q.AccountID)
+	if len(q.AccountIDs) > 0 {
+		add(`c.account_id IN (`+placeholders(len(q.AccountIDs))+`)`, ids(q.AccountIDs)...)
 	}
 	if q.ChatID != 0 {
 		add(`m.chat_id = ?`, q.ChatID)
@@ -129,7 +131,7 @@ func (s *Searcher) Search(ctx context.Context, q Query) (Page, error) {
 	}
 
 	query := `
-		SELECT m.id, c.account_id, c.id, c.title, COALESCE(sn.display_name, ''), m.kind, m.sent_at,
+		SELECT m.id, c.account_id, c.id, c.title, c.kind, COALESCE(sn.display_name, ''), m.outgoing, m.kind, m.sent_at,
 		       m.edited_at IS NOT NULL, m.deleted_at IS NOT NULL, m.text
 		FROM ` + from + `
 		JOIN chats c ON c.id = m.chat_id
@@ -148,19 +150,20 @@ func (s *Searcher) Search(ctx context.Context, q Query) (Page, error) {
 	var page Page
 	for rows.Next() {
 		var (
-			h    Hit
-			kind string
-			sent int64
-			text string
+			h        Hit
+			chatKind string
+			kind     string
+			sent     int64
+			text     string
 		)
-		if err := rows.Scan(&h.MessageID, &h.AccountID, &h.ChatID, &h.ChatTitle, &h.SenderName, &kind, &sent, &h.Edited, &h.Deleted, &text); err != nil {
+		if err := rows.Scan(&h.MessageID, &h.AccountID, &h.ChatID, &h.ChatTitle, &chatKind, &h.SenderName, &h.Outgoing, &kind, &sent, &h.Edited, &h.Deleted, &text); err != nil {
 			return Page{}, err
 		}
 		if len(page.Hits) == limit {
 			page.More = true
 			break
 		}
-		h.Kind = model.MessageKind(kind)
+		h.Kind, h.ChatKind = model.MessageKind(kind), model.ChatKind(chatKind)
 		h.SentAt = time.Unix(sent, 0).UTC()
 		h.Snippet = s.analyzer.snippet(text, p)
 		page.Hits = append(page.Hits, h)
@@ -194,7 +197,7 @@ func (s *Searcher) addFiles(ctx context.Context, hits []Hit, p parsed) error {
 	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT message_id, file_name FROM attachments
-		WHERE file_name != '' AND message_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+`)
+		WHERE file_name != '' AND message_id IN (`+placeholders(len(ids))+`)
 		ORDER BY message_id, position`, ids...)
 	if err != nil {
 		return err
@@ -214,4 +217,15 @@ func (s *Searcher) addFiles(ctx context.Context, hits []Hit, p parsed) error {
 		}
 	}
 	return rows.Err()
+}
+
+func placeholders(n int) string { return strings.TrimSuffix(strings.Repeat("?,", n), ",") }
+
+// ids turns account IDs into query arguments.
+func ids(accountIDs []int64) []any {
+	out := make([]any, len(accountIDs))
+	for i, id := range accountIDs {
+		out[i] = id
+	}
+	return out
 }

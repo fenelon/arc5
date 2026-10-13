@@ -41,11 +41,12 @@ type Names struct {
 // must begin a word of the name; case, accents and ё/е are ignored, as in
 // message search. Chats come whole-word matches first, then most recent
 // first. A chat with no messages and a person with no name are not listed.
+// accountIDs limits the search to those accounts; nil means every account.
 // limit caps each list; zero means DefaultNameLimit.
 //
 // Names are matched by reading every chat and sender, which is a few thousand
 // rows for a personal archive, not through the message index.
-func (s *Searcher) Names(ctx context.Context, text string, limit int) (Names, error) {
+func (s *Searcher) Names(ctx context.Context, text string, accountIDs []int64, limit int) (Names, error) {
 	if limit <= 0 {
 		limit = DefaultNameLimit
 	}
@@ -60,6 +61,10 @@ func (s *Searcher) Names(ctx context.Context, text string, limit int) (Names, er
 		words = words[:maxQueryTerms]
 	}
 	highlight := parsed{exact: map[string]bool{}, stems: map[string]bool{}, prefixes: words}
+	scope, args := "", ids(accountIDs)
+	if len(accountIDs) > 0 {
+		scope = ` AND account_id IN (` + placeholders(len(accountIDs)) + `)`
+	}
 
 	type rankedChat struct {
 		ChatMatch
@@ -69,7 +74,7 @@ func (s *Searcher) Names(ctx context.Context, text string, limit int) (Names, er
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT c.id, c.account_id, c.kind, c.title,
 		       (SELECT MAX(m.sent_at) FROM messages m WHERE m.chat_id = c.id)
-		FROM chats c`)
+		FROM chats c WHERE 1`+scope, args...)
 	if err != nil {
 		return Names{}, err
 	}
@@ -116,7 +121,7 @@ func (s *Searcher) Names(ctx context.Context, text string, limit int) (Names, er
 	var people []rankedPerson
 	rows, err = s.db.QueryContext(ctx, `
 		SELECT id, account_id, display_name, username FROM senders
-		WHERE display_name != '' OR username != ''`)
+		WHERE (display_name != '' OR username != '')`+scope, args...)
 	if err != nil {
 		return Names{}, err
 	}
