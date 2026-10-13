@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -34,6 +35,7 @@ type sourcePage struct {
 	Page
 	Chats         []ChatRow
 	MoreChatsHref string
+	Results       *Results // replaces the chat list while there is a search
 	Conversation  *Conversation
 }
 
@@ -139,16 +141,35 @@ func (s *Server) sourceShell(w http.ResponseWriter, r *http.Request, sess archiv
 		http.Error(w, "This source is shown as mail, which this version of arc5 cannot display yet.", http.StatusNotImplemented)
 		return sourcePage{}, selection{}, false
 	}
-	count := chatCount(r)
-	rows, more, err := s.chatRows(sel, currentChat, count)
-	if err != nil {
+	data := sourcePage{Page: s.chrome(r, sess, sel.Name, all, sel.Key)}
+	data.Search = &SearchBox{Action: "/s/" + sel.Key, Results: "/s/" + sel.Key + "/results", Query: searchQuery(r)}
+	results, err := s.results(r.Context(), r, sel)
+	switch {
+	case errors.Is(err, errNoSuchPerson):
+		http.NotFound(w, r)
+		return sourcePage{}, selection{}, false
+	case err != nil:
 		s.fail(w, err)
 		return sourcePage{}, selection{}, false
+	case results != nil:
+		data.Results = results
+	default:
+		count := chatCount(r)
+		rows, more, err := s.chatRows(sel, currentChat, count)
+		if err != nil {
+			s.fail(w, err)
+			return sourcePage{}, selection{}, false
+		}
+		data.Chats = rows
+		if more {
+			path := r.URL.Path // the chat list grows in place, on a conversation's page too
+			if r.PathValue("chat") == "" {
+				path = "/s/" + sel.Key
+			}
+			data.MoreChatsHref = fmt.Sprintf("%s?chats=%d", path, count+chatsPerPage)
+		}
 	}
-	data := sourcePage{Page: s.chrome(r, sess, sel.Name, all, sel.Key), Chats: rows}
-	if more {
-		data.MoreChatsHref = fmt.Sprintf("%s?chats=%d", r.URL.Path, count+chatsPerPage)
-	}
+	remember(w, r, sel.Key)
 	return data, sel, true
 }
 

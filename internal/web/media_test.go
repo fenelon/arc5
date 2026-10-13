@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 
@@ -125,7 +126,7 @@ func TestFetchNow(t *testing.T) {
 		t.Fatalf("fetch: %d to %q, requested %v", rec.Code, rec.Header().Get("Location"), s.runner.requested)
 	}
 	// Only an address on this site is followed back.
-	for _, back := range []string{"https://evil.example/", "//evil.example/", `/\evil.example`, "", "javascript:alert(1)"} {
+	for _, back := range []string{"https://evil.example/", "//evil.example/", `/\evil.example`, "", "javascript:alert(1)", "/\t/evil.example/", "/\x01/x", "/\x7f"} {
 		if rec := s.post(path, url.Values{"back": {back}}); !redirectsTo(rec, "/") {
 			t.Errorf("back %q: redirected to %q, want /", back, rec.Header().Get("Location"))
 		}
@@ -154,5 +155,32 @@ func TestFetchNow(t *testing.T) {
 	}
 	if rec := s.post("/media/banana/fetch", nil); rec.Code != http.StatusNotFound {
 		t.Errorf("fetch of a bad id: %d", rec.Code)
+	}
+}
+
+// View-once media is fetched only by a source set to keep it; the owner
+// cannot ask for it afterwards, so nothing reports it as opened.
+func TestFetchRefusesWithheldViewOnceMedia(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	ids := storeFiles(t, s, 0, model.Attachment{Kind: model.AttachPhoto, FileName: "once.jpg", Size: 9, Ephemeral: true, NoFetch: true, NoFetchReason: "self-destructing media is not archived"})
+	if rec := s.post(fmt.Sprintf("/media/%d/fetch", ids[0]), nil); rec.Code != http.StatusConflict || len(s.runner.requested) != 0 {
+		t.Fatalf("fetching withheld view-once media: %d, requested %v", rec.Code, s.runner.requested)
+	}
+}
+
+func TestMissingFileIs404(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	ids := storeFiles(t, s, 1, model.Attachment{Kind: model.AttachPhoto, FileName: "plan.jpg", MimeType: "image/jpeg", Size: 9})
+	file, err := s.store.AttachmentFile(ids[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(file.Path); err != nil {
+		t.Fatal(err)
+	}
+	if rec := s.get(fmt.Sprintf("/media/%d", ids[0])); rec.Code != http.StatusNotFound {
+		t.Errorf("a file missing from disk: %d, want 404", rec.Code)
 	}
 }

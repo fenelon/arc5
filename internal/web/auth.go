@@ -44,9 +44,10 @@ const (
 )
 
 var (
-	errShortPassword = fmt.Errorf("the password needs at least %d characters", minPasswordLen)
-	errEnvPassword   = errors.New("the password is set by ARC5_PASSWORD and cannot be changed here")
-	errLoginBusy     = errors.New("another sign-in is being checked")
+	errShortPassword  = fmt.Errorf("the password needs at least %d characters", minPasswordLen)
+	errEnvPassword    = errors.New("the password is set by ARC5_PASSWORD and cannot be changed here")
+	errLoginBusy      = errors.New("another sign-in is being checked")
+	errPasswordExists = errors.New("a password was already chosen")
 )
 
 func hashPassword(password string) (string, error) {
@@ -70,6 +71,12 @@ func verifyPassword(encoded, password string) bool {
 	salt, err4 := base64.RawStdEncoding.DecodeString(parts[4])
 	want, err5 := base64.RawStdEncoding.DecodeString(parts[5])
 	if err1 != nil || err2 != nil || err3 != nil || err4 != nil || err5 != nil || len(want) == 0 || threads == 0 {
+		return false
+	}
+	// Only arc5 writes these hashes, but a damaged one must not make the
+	// check panic or allocate without bound.
+	if memory < 1024 || memory > 256*1024 || passes < 1 || passes > 16 || threads < 1 || threads > 16 ||
+		len(salt) < 8 || len(want) < 16 || len(want) > 64 {
 		return false
 	}
 	got := argon2.IDKey([]byte(password), salt, uint32(passes), uint32(memory), uint8(threads), uint32(len(want)))
@@ -149,6 +156,27 @@ func (a *auth) setPassword(password string) error {
 		return err
 	}
 	return a.store.DeleteAllSessions()
+}
+
+// setFirstPassword stores the password chosen at first run. It fails with
+// errPasswordExists if one was chosen meanwhile, so two first-run forms sent
+// at once cannot both set it.
+func (a *auth) setFirstPassword(password string) error {
+	if a.usesEnv() {
+		return errEnvPassword
+	}
+	if utf8.RuneCountInString(password) < minPasswordLen {
+		return errShortPassword
+	}
+	hash, err := hashPassword(password)
+	if err != nil {
+		return err
+	}
+	set, err := a.store.SetSettingIfAbsent(passwordKey, hash)
+	if err == nil && !set {
+		err = errPasswordExists
+	}
+	return err
 }
 
 func (a *auth) check(password string) (bool, error) {

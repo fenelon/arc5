@@ -1,0 +1,21 @@
+{{define "archived"}}{{template "head" .}}
+<body class="app">
+{{template "topbar" .}}
+{{template "banner" .}}
+<main class="plain plain--settings">
+<p><a class="panel__link" href="/sources/{{.AccountID}}">Back to {{.Name}}</a></p>
+<h1>Chats of {{.Name}}</h1>
+<p>Ticked chats are archived. A chat switched off keeps what was archived before; nothing new is saved from it.</p>
+{{if .Saved}}<p class="saved" role="status">Saved. The source starts again with this choice.</p>{{end}}
+{{if .Removed}}<p class="panel__help">This source was removed, so nothing is archived from it any more.</p>{{end}}
+<form method="post" action="/sources/{{.AccountID}}/chats">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+{{range .Groups}}<section class="card"><h2 class="card__title">{{.Title}}</h2>
+<ul class="toggles">{{range .Chats}}<li><input type="hidden" name="shown" value="{{.ID}}"><label class="choice toggle"><input type="checkbox" name="archived" value="{{.ID}}"{{if .Archived}} checked{{end}}{{if $.Removed}} disabled{{end}}> <span class="toggle__text"><span class="toggle__title">{{.Title}}</span><span class="toggle__detail">{{.Detail}}</span></span></label></li>
+{{end}}</ul></section>
+{{else}}<p class="empty">This source has no chats yet.</p>
+{{end}}{{if and .Groups (not .Removed)}}<div class="page-links"><button class="button" type="submit">Save</button></div>{{end}}
+</form>
+</main>
+</body>
+</html>{{end}}

@@ -36,7 +36,7 @@ func namesFixture(t *testing.T) *fixture {
 
 func (f *fixture) names(query string) Names {
 	f.t.Helper()
-	names, err := f.search.Names(context.Background(), query, 0)
+	names, err := f.search.Names(context.Background(), query, nil, 0)
 	if err != nil {
 		f.t.Fatalf("Names(%q): %v", query, err)
 	}
@@ -138,7 +138,7 @@ func TestNamesLimit(t *testing.T) {
 		f.say("x", func(m *model.Message) { m.ChatSourceID = id })
 		_ = i
 	}
-	got, err := f.search.Names(context.Background(), "team", 2)
+	got, err := f.search.Names(context.Background(), "team", nil, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,6 +157,43 @@ func TestNamesInUnspacedScripts(t *testing.T) {
 	for _, query := range []string{"田中", "太郎", "田", "郎"} {
 		if got := f.names(query); len(got.Chats) != 1 {
 			t.Errorf("%q found %d chats, want 1", query, len(got.Chats))
+		}
+	}
+}
+
+func TestNamesKeepToTheChosenAccounts(t *testing.T) {
+	f := namesFixture(t)
+	other, err := f.store.CreateAccount("test", "Other", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.UpsertChat(other, model.Chat{SourceID: "x", Kind: model.ChatPrivate, Title: "Alice Elsewhere"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.UpsertSender(other, model.Sender{SourceID: "ux", DisplayName: "Alice Elsewhere"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.UpsertMessage(other, model.Message{ChatSourceID: "x", SourceID: "1", SenderSourceID: "ux", SentAt: day, Text: "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	for name, c := range map[string]struct {
+		accounts      []int64
+		chats, people []string
+	}{
+		"every account":    {nil, []string{"[Alice] Elsewhere", "[Alice] Smith"}, []string{"[Alice] Elsewhere", "[Alice] Smith"}},
+		"the first only":   {[]int64{f.acc}, []string{"[Alice] Smith"}, []string{"[Alice] Smith"}},
+		"the second only":  {[]int64{other}, []string{"[Alice] Elsewhere"}, []string{"[Alice] Elsewhere"}},
+		"an empty account": {[]int64{9999}, nil, nil},
+	} {
+		got, err := f.search.Names(context.Background(), "alice", c.accounts, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		chats, people := chatTitles(got), peopleNames(got)
+		slices.Sort(chats)
+		slices.Sort(people)
+		if !slices.Equal(chats, c.chats) || !slices.Equal(people, c.people) {
+			t.Errorf("%s: chats %q, people %q; want %q and %q", name, chats, people, c.chats, c.people)
 		}
 	}
 }

@@ -111,3 +111,26 @@ func (a *Analyzer) snippet(text string, p parsed) []Fragment {
 	}
 	return out
 }
+
+// Highlight returns the whole of text with the words query matches marked,
+// as the conversation view shows a message opened from a search. Line breaks
+// are kept.
+func (s *Searcher) Highlight(query, text string) []Fragment {
+	text = prepare(text)
+	if text == "" {
+		return nil
+	}
+	var out []Fragment
+	pos := 0
+	for _, span := range s.analyzer.matchSpans(text, s.analyzer.parse(query)) {
+		if pos < span[0] {
+			out = append(out, Fragment{Text: text[pos:span[0]]})
+		}
+		out = append(out, Fragment{Text: text[span[0]:span[1]], Match: true})
+		pos = span[1]
+	}
+	if pos < len(text) {
+		out = append(out, Fragment{Text: text[pos:]})
+	}
+	return out
+}

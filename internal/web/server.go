@@ -3,6 +3,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
@@ -17,6 +18,8 @@ import (
 
 	"github.com/fenelon/arc5/internal/archive"
 	"github.com/fenelon/arc5/internal/connector"
+	"github.com/fenelon/arc5/internal/indexer"
+	"github.com/fenelon/arc5/internal/search"
 )
 
 //go:embed static templates
@@ -26,16 +29,30 @@ var files embed.FS
 // nothing inline. Message text can never run as code.
 const csp = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
 
+// Index is what the interface needs from the search index: a searcher, the
+// state of the index, and a way to change its languages.
+type Index interface {
+	Searcher() *search.Searcher
+	Status() indexer.Status
+	SetLanguages(codes []string) error
+}
+
 // Runner is what the interface needs from the connector runner.
 type Runner interface {
 	Status() []connector.Status
 	RequestMedia(attachmentID int64) error
+	// Restart stops an account's connector and starts it again if the
+	// account is enabled, after its settings change.
+	Restart(accountID int64) error
+	// SignOut has an account's connector end its session at the source.
+	SignOut(ctx context.Context, accountID int64) error
 }
 
 type Deps struct {
 	Store       *archive.Store
 	Runner      Runner
 	Registry    *connector.Registry
+	Index       Index
 	EnvPassword string           // ARC5_PASSWORD; empty lets the owner choose one
 	Now         func() time.Time // defaults to time.Now
 	Location    *time.Location   // times are shown in this zone; defaults to time.Local
@@ -48,9 +65,14 @@ type Server struct {
 	static  fs.FS
 	version string
 	mux     *http.ServeMux
+	flows   flows        // logins in progress on the Sources page
+	logins  accountLocks // one login, sign-out or removal of a source at a time
 }
 
 func New(deps Deps) (*Server, error) {
+	if deps.Store == nil || deps.Runner == nil || deps.Registry == nil || deps.Index == nil {
+		return nil, errors.New("web: Deps needs a store, a runner, a registry and an index")
+	}
 	if deps.Now == nil {
 		deps.Now = time.Now
 	}
@@ -90,7 +112,25 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /{$}", s.signedIn(s.home))
 	s.mux.Handle("GET /s/{source}", s.signedIn(s.sourceView))
 	s.mux.Handle("GET /s/{source}/c/{chat}", s.signedIn(s.conversationView))
+	s.mux.Handle("GET /s/{source}/results", s.signedIn(s.resultsFragment))
 	s.mux.Handle("GET /sources", s.signedIn(s.sourcesList))
+	s.mux.Handle("GET /sources/new", s.signedIn(s.newSourceForm))
+	s.mux.Handle("POST /sources/new", s.signedIn(s.addSource))
+	s.mux.Handle("GET /sources/{id}", s.signedIn(s.sourceSettings))
+	s.mux.Handle("GET /sources/{id}/login", s.signedIn(s.loginStep))
+	s.mux.Handle("POST /sources/{id}/login", s.signedIn(s.submitStep))
+	s.mux.Handle("POST /sources/{id}/login/cancel", s.signedIn(s.cancelLogin))
+	s.mux.Handle("POST /sources/{id}/name", s.signedIn(s.renameSource))
+	s.mux.Handle("POST /sources/{id}/settings", s.signedIn(s.saveSourceSettings))
+	s.mux.Handle("POST /sources/{id}/signout", s.signedIn(s.signOutSource))
+	s.mux.Handle("POST /sources/{id}/remove", s.signedIn(s.removeSource))
+	s.mux.Handle("GET /sources/{id}/chats", s.signedIn(s.archivedChats))
+	s.mux.Handle("POST /sources/{id}/chats", s.signedIn(s.saveArchivedChats))
+	s.mux.Handle("GET /settings", s.signedIn(s.settings))
+	s.mux.Handle("POST /settings/appearance", s.signedIn(s.saveAppearance))
+	s.mux.Handle("POST /settings/languages", s.signedIn(s.saveLanguages))
+	s.mux.Handle("POST /settings/attachments", s.signedIn(s.saveAttachments))
+	s.mux.Handle("POST /settings/password", s.signedIn(s.savePassword))
 	s.mux.Handle("GET /media/{id}", s.signedIn(s.serveMedia))
 	s.mux.Handle("POST /media/{id}/fetch", s.signedIn(s.fetchMedia))
 }
@@ -232,5 +272,35 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request, sess archive.Sessi
 		s.render(w, http.StatusOK, "empty", s.page(r, sess, "Welcome"))
 		return
 	}
+	all, err := s.sources()
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	if key := s.remembered(r, all); key != "" {
+		redirect(w, r, "/s/"+key)
+		return
+	}
 	redirect(w, r, "/s/chats")
+}
+
+// sourceCookie remembers the last source the owner opened, so home, Sources
+// and Settings come back to it.
+const sourceCookie = "arc5_source"
+
+func remember(w http.ResponseWriter, r *http.Request, key string) {
+	http.SetCookie(w, &http.Cookie{Name: sourceCookie, Value: key, Path: "/", MaxAge: 365 * 24 * 3600,
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: isSecure(r)})
+}
+
+// remembered is the last source opened, if it still exists.
+func (s *Server) remembered(r *http.Request, all []source) string {
+	c, err := r.Cookie(sourceCookie)
+	if err != nil {
+		return ""
+	}
+	if _, ok := s.selection(c.Value, all); !ok {
+		return ""
+	}
+	return c.Value
 }

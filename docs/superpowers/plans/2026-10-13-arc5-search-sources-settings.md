@@ -7078,3 +7078,47 @@ and the next plan is milestone 4, the Telegram connector, which needs the two
 decisions STATUS lists before it is planned. Telegram's connector implements
 `connector.SignOuter` and its setup flow implements `io.Closer` if it keeps a
 connection open between login steps.
+
+## Post-review changes
+
+Executed on branch `search-sources-settings`, one commit per task, from the
+code blocks above. The changes made on top of them:
+
+**During the tasks.** Task 6's `TestSearchShowsHostileTextAsText` passed
+before the search existed, because it only checked that markup was absent.
+It now also checks that each hostile string appears escaped and that each page
+answers 200. It was seen to fail, then to pass.
+
+**From looking at the demo archive beside the mockups (Task 15, Step 5).**
+Nothing needed changing. Two differences remain on purpose:
+- A connector's own settings sit in a row of their own under Name, Chats and
+  State, instead of in the mockup's third column, because they are rendered
+  from the connector's field list.
+- The border of a message opened from a search is a darker gold than the
+  mockup's yellow.
+
+**From the whole-branch review.** No critical findings. Two were important,
+and both are fixed in one commit:
+
+| Finding | Change | Test |
+|---|---|---|
+| A login that finished while its source was being removed stored its session after the removal had deleted it. The source then answered 409 to everything, so the owner could not clear it | One lock per source (`Server.logins`) covers each login step, cancelling, signing out and removing, and the account is read after the lock is taken. Removal ends the login in progress first. `SetAccountEnabled` checks `removed_at` inside its `UPDATE` | `TestRemovingWaitsForALoginInFlight` |
+| Data race on `flow.expires`: it was read under the flows' lock and written under the flow's own. `get` also closed flows while holding the map lock, even when a step was still running | `expires` is touched only under the flows' lock (`extend`). Expired flows are closed after the map is unlocked, under the flow's lock, so a step in flight finishes first. A request that was waiting on a closed flow starts again | `TestLoginsOfTwoSourcesAtOnce` (fails under `-race` without the change) |
+
+Deferred minor findings, listed in STATUS:
+- Unfinished logins are closed only when a later request looks at them, and
+  none are closed at shutdown.
+- The login page can be opened for a source that is running fine.
+- "Add a source" creates the account switched on, then switches it off.
+- A name made only of control characters gives a 500 and leaves an orphan
+  account.
+- Saving the languages card always rebuilds the index, even when the list is
+  unchanged.
+- A failed save of the language setting leaves a half-built index reported as
+  current.
+- Paging a conversation opened from filtered results drops the filters.
+- The Sources page polls itself twice every 5 s, and each render counts every
+  message in each chat.
+- `Runner.SignOut` holds the restart lock while it signs out over the network.
+- A refused login step loses its non-secret input.
+- `<meta name="csrf">` is used only by tests.

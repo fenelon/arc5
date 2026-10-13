@@ -52,8 +52,11 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 	problem := ""
 	if password != r.PostFormValue("password_again") {
 		problem = "The two passwords are not the same. Type the same one twice."
-	} else if err := s.auth.setPassword(password); errors.Is(err, errShortPassword) {
+	} else if err := s.auth.setFirstPassword(password); errors.Is(err, errShortPassword) {
 		problem = "That password is too short. Use at least 8 characters."
+	} else if errors.Is(err, errPasswordExists) {
+		redirect(w, r, "/login") // another first-run form got there first
+		return
 	} else if err != nil {
 		s.fail(w, err)
 		return

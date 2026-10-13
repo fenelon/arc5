@@ -131,7 +131,40 @@ func (r *Runner) launch(acc archive.Account) {
 func (r *Runner) Restart(accountID int64) error {
 	r.restartMu.Lock()
 	defer r.restartMu.Unlock()
+	return r.restart(accountID, nil)
+}
 
+// SignOut stops an account's connector, has it end its session at the
+// source, and starts it again, when it reports that it needs login. It
+// returns ErrCannotSignOut if the connector has no way to sign out.
+func (r *Runner) SignOut(ctx context.Context, accountID int64) error {
+	acc, err := r.store.Account(accountID)
+	if err != nil {
+		return err
+	}
+	c, ok := r.reg.New(acc.Connector)
+	if !ok {
+		return ErrCannotSignOut
+	}
+	so, ok := c.(SignOuter)
+	if !ok {
+		return ErrCannotSignOut
+	}
+	r.restartMu.Lock()
+	defer r.restartMu.Unlock()
+	var signOutErr error
+	err = r.restart(accountID, func() {
+		signOutErr = so.SignOut(ctx, accountState{store: r.store, accountID: accountID})
+	})
+	if signOutErr != nil {
+		return signOutErr
+	}
+	return err
+}
+
+// restart stops an account's connector, runs between while it is stopped,
+// and starts it again if the account is enabled. restartMu must be held.
+func (r *Runner) restart(accountID int64, between func()) error {
 	r.mu.Lock()
 	s := r.accounts[accountID]
 	delete(r.accounts, accountID)
@@ -140,6 +173,9 @@ func (r *Runner) Restart(accountID int64) error {
 	if s != nil {
 		s.cancel()
 		<-s.done
+	}
+	if between != nil {
+		between()
 	}
 	if stopping {
 		return nil

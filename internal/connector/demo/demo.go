@@ -5,10 +5,12 @@ package demo
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
 	"image/png"
+	"strings"
 	"time"
 
 	"github.com/fenelon/arc5/internal/archive"
@@ -19,19 +21,75 @@ import (
 // Name is the connector name stored on demo accounts.
 const Name = "demo"
 
+// signedOutKey is set in the account's state while the demo is signed out.
+const signedOutKey = "signed_out"
+
+// loginCode is what the demo's login asks for.
+const loginCode = "12345"
+
+// idle captures nothing. It reports itself live, or needing login after it
+// was signed out, so every part of the Sources page can be tried on the demo.
 type idle struct{}
 
-func (idle) Run(ctx context.Context, sink connector.Sink, _ connector.State, _ map[string]string) error {
+func (idle) Run(ctx context.Context, sink connector.Sink, state connector.State, _ map[string]string) error {
+	if v, err := state.Get(signedOutKey); err != nil || len(v) > 0 {
+		return errors.Join(connector.ErrNeedsLogin, err)
+	}
 	sink.ReportProgress(connector.Progress{Phase: connector.PhaseLive})
-	<-ctx.Done()
-	return ctx.Err()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case ref := <-sink.RequestedMedia():
+			// "Fetch now" on a sample file: there is nothing to fetch.
+			if err := sink.SetAttachmentStatus(ref, model.StatusUnavailable, "the demo has no files to fetch"); err != nil {
+				return err
+			}
+		}
+	}
 }
-func (idle) Setup(connector.State) connector.SetupFlow { return nil }
-func (idle) Settings() []connector.Field               { return nil }
 
-// Register adds the demo connector, so demo accounts show as live.
+func (idle) Setup(state connector.State) connector.SetupFlow { return &login{state: state} }
+
+// Settings are examples of each kind of field. The demo ignores them.
+func (idle) Settings() []connector.Field {
+	return []connector.Field{
+		{Name: "speed", Label: "Speed", Help: "How quickly history is fetched. The demo has none to fetch.",
+			Kind: connector.FieldChoice, Choices: []string{"Slow", "Normal", "Fast"}, Default: "Normal"},
+		{Name: "keep_ephemeral", Label: "Keep self-destructing and view-once media",
+			Help: "Off unless you turn it on. The demo has none.", Kind: connector.FieldBool},
+	}
+}
+
+func (idle) SignOut(_ context.Context, state connector.State) error {
+	return state.Set(signedOutKey, []byte("1"))
+}
+
+// login asks for a code, the way a real source asks for one sent by text.
+type login struct{ state connector.State }
+
+func (l *login) Next(_ context.Context, input map[string]string) (connector.Step, error) {
+	ask := connector.Step{
+		Title:  "Sign in to the demo",
+		Help:   "A real source sends a code to your phone. The demo's code is " + loginCode + ".",
+		Fields: []connector.Field{{Name: "code", Label: "Login code", Kind: connector.FieldText}},
+	}
+	if input == nil {
+		return ask, nil
+	}
+	if strings.TrimSpace(input["code"]) != loginCode {
+		return ask, fmt.Errorf("That code is not right. The demo's code is %s.", loginCode)
+	}
+	if err := l.state.Set(signedOutKey, nil); err != nil {
+		return ask, err
+	}
+	return connector.Step{Done: true}, nil
+}
+
+// Register adds the demo connector, so demo accounts show as live. It is
+// hidden: "Add a source" does not offer it.
 func Register(reg *connector.Registry) {
-	reg.Register(connector.Info{Name: Name, Title: "Demo", Display: connector.DisplayChats}, func() connector.Connector { return idle{} })
+	reg.Register(connector.Info{Name: Name, Title: "Demo", Display: connector.DisplayChats, Hidden: true}, func() connector.Connector { return idle{} })
 }
 
 // day is the last day of the sample conversations.

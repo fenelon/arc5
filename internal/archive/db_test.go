@@ -88,8 +88,8 @@ func TestReopenKeepsDataAndAppliesMigrationsOnce(t *testing.T) {
 	if err := s.r.QueryRow(`SELECT COUNT(*) FROM settings WHERE key = 'probe'`).Scan(&probes); err != nil {
 		t.Fatal(err)
 	}
-	if migrations != 3 || probes != 1 {
-		t.Fatalf("migrations = %d, probes = %d, want 3 and 1", migrations, probes)
+	if migrations != 4 || probes != 1 {
+		t.Fatalf("migrations = %d, probes = %d, want 4 and 1", migrations, probes)
 	}
 }
 

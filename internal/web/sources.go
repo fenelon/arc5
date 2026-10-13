@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/fenelon/arc5/internal/archive"
 	"github.com/fenelon/arc5/internal/connector"
@@ -45,23 +46,31 @@ func (s *Server) sources() ([]source, error) {
 			src.Info = connector.Info{Name: acc.Connector, Title: acc.Connector, Display: connector.DisplayChats}
 		}
 		st, running := status[acc.ID]
-		describe(&src, st, running)
+		describe(&src, st, running, s.when)
 		out = append(out, src)
 	}
 	return out, nil
 }
 
 // describe turns the runner's status into a state mark and a sentence.
-func describe(src *source, st connector.Status, running bool) {
+// when formats the moment a state began, for "Needs login since 12:00".
+func describe(src *source, st connector.Status, running bool, when func(time.Time) string) {
 	set := func(state, label string) { src.State, src.StateLabel, src.Detail = state, label, label }
 	switch {
+	case !src.Account.RemovedAt.IsZero():
+		set("", "Removed")
+		return
 	case !src.Account.Enabled:
 		set(stateOffline, "Switched off")
 	case !running, st.State == connector.StateStopped:
 		set(stateOffline, "Not running")
 	case st.State == connector.StateNeedsLogin:
 		set(stateNeedsLogin, "Needs login")
+		if !st.Since.IsZero() {
+			src.Detail = "Needs login since " + when(st.Since)
+		}
 		src.Failing = true
+		return // the error only repeats that it needs login
 	case st.State == connector.StatePaused:
 		set(stateOffline, "Paused, the archive could not be written")
 		src.Failing = true
@@ -115,14 +124,15 @@ type selection struct {
 }
 
 var kinds = []struct {
-	display connector.Display
-	key     string
-	title   string
-	one     string
-	many    string
+	display      connector.Display
+	key          string
+	title        string
+	sourcesTitle string // the group's heading on the Sources page
+	one          string
+	many         string
 }{
-	{connector.DisplayChats, "chats", "Messengers", "messenger", "messengers"},
-	{connector.DisplayMail, "mail", "Mail", "mailbox", "mailboxes"},
+	{connector.DisplayChats, "chats", "Messengers", "Messengers, shown as chats", "messenger", "messengers"},
+	{connector.DisplayMail, "mail", "Mail", "Mailboxes, shown as mail", "mailbox", "mailboxes"},
 }
 
 func (s *Server) selection(key string, all []source) (selection, bool) {
@@ -153,6 +163,9 @@ func (s *Server) chrome(r *http.Request, sess archive.Session, title string, all
 	if len(all) == 0 {
 		return p
 	}
+	if current == "" {
+		current = s.remembered(r, all)
+	}
 	picker := &Picker{}
 	for _, k := range kinds {
 		var tiles []Tile
@@ -182,36 +195,13 @@ func (s *Server) chrome(r *http.Request, sess archive.Session, title string, all
 	p.Picker = picker
 	for _, src := range all {
 		if src.Failing {
-			p.Alert = &Alert{Name: src.Account.Label, Detail: src.Detail + ". New messages are not being saved, and ones that auto-delete cannot be recovered."}
+			p.Alert = &Alert{Name: src.Account.Label, Detail: src.Detail + ". New messages are not being saved, and ones that auto-delete cannot be recovered.",
+				ActionHref: "/sources/" + src.key(), ActionLabel: "Open sources"}
+			if src.State == stateNeedsLogin && src.Known {
+				p.Alert.ActionHref, p.Alert.ActionLabel = "/sources/"+src.key()+"/login", "Log in again"
+			}
 			break
 		}
 	}
 	return p
-}
-
-// sourcesPage lists every source with its state.
-type sourcesPage struct {
-	Page
-	Groups []PickerGroup
-}
-
-func (s *Server) sourcesList(w http.ResponseWriter, r *http.Request, sess archive.Session) {
-	all, err := s.sources()
-	if err != nil {
-		s.fail(w, err)
-		return
-	}
-	data := sourcesPage{Page: s.chrome(r, sess, "Sources", all, "")}
-	for _, k := range kinds {
-		group := PickerGroup{Title: k.title}
-		for _, src := range all {
-			if src.Info.Display == k.display {
-				group.Tiles = append(group.Tiles, src.tile(""))
-			}
-		}
-		if len(group.Tiles) > 0 {
-			data.Groups = append(data.Groups, group)
-		}
-	}
-	s.render(w, http.StatusOK, "sources", data)
 }

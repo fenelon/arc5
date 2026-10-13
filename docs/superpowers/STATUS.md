@@ -10,7 +10,7 @@ session.
 | 1. Archive core, connector model, runner | Done, merged. Plan: `plans/2026-10-12-arc5-core.md` |
 | 2. Search engine (analyzer, FTS index, names) | Done, merged. Plan: `plans/2026-10-12-arc5-search.md` |
 | 3a. Web shell and chats view | Done, merged. Plan: `plans/2026-10-13-arc5-web-shell.md` |
-| 3b. Search in the interface, Sources page with setup flows, Settings | **Planned, awaiting the owner's review.** Plan: `plans/2026-10-13-arc5-search-sources-settings.md`; its "Decisions for the owner to confirm" list the open calls |
+| 3b. Search in the interface, Sources page with setup flows, Settings | Done, merged. Plan: `plans/2026-10-13-arc5-search-sources-settings.md` (its 13 decisions were taken as written) |
 | 4. Telegram connector | Not planned yet; two decisions open (below) |
 | 5. Alerts, `backup`, Docker image, view-once option | Not planned yet |
 | Later | Email connector with the mail layout, then WhatsApp |
@@ -86,16 +86,20 @@ countdown for the other side. The connector must never call that method.
 - Removing `ARC5_PASSWORD` makes an earlier password set in the browser active
   again (every session is cleared).
 
-## Notes for plan 3b (now folded into the 3b plan)
-
-- The top bar needs the search box and a Settings link (3a has "Sign out"
-  only).
-- The demo connector is registered in the default registry; "Add a source"
-  must not offer it.
-- 3a offers "Fetch now" on skipped view-once media. Decide whether to hide it
-  there.
-- Settings in the mockup: appearance, search languages (18 checkboxes, "Save
-  and rebuild the index"), attachment size limit, outage alert webhook,
-  password.
-- Telegram login steps appear in the Sources settings panel through the
-  connector's `SetupFlow`.
+- From the 3b review (listed in its plan's "Post-review changes"):
+  - Unfinished logins are swept only when a later request looks at them, and
+    none are closed at shutdown.
+  - The login page can be opened for a source that is running.
+  - "Add a source" creates the account switched on, then switches it off.
+  - A name made only of control characters gives a 500 and an orphan account.
+  - A mistaken source can be removed but never deleted.
+  - The languages card rebuilds the index even when unchanged.
+  - A failed save of the language setting leaves the index reported as
+    current.
+  - Paging a conversation opened from filtered results drops the filters.
+  - The Sources page polls itself twice every 5 s, and each render counts the
+    messages of every chat.
+  - `Runner.SignOut` holds the restart lock across the network call.
+  - Refused login steps lose their non-secret input.
+  - A cross-site link can open `/sources/{id}/login` and start a connector's
+    first login step. Check this when Telegram's first step sends a code.

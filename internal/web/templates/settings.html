@@ -1,0 +1,65 @@
+{{define "settings"}}{{template "head" .}}
+<body class="app">
+{{template "topbar" .}}
+{{template "banner" .}}
+<main class="plain plain--settings">
+<h1>Settings</h1>
+
+<section class="card" id="appearance" aria-labelledby="appearance-title">
+<h2 class="card__title" id="appearance-title">Appearance</h2>
+{{template "settings-note" (dict "Card" "appearance" "Page" .)}}
+<form method="post" action="/settings/appearance" class="choices" data-controller="jump">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<fieldset><legend class="visually-hidden">Theme</legend>
+<label class="choice"><input type="radio" name="theme" value=""{{if not .Theme}} checked{{end}} data-action="jump#go"> Follow this device</label>
+<label class="choice"><input type="radio" name="theme" value="light"{{if eq .Theme "light"}} checked{{end}} data-action="jump#go"> Light</label>
+<label class="choice"><input type="radio" name="theme" value="dark"{{if eq .Theme "dark"}} checked{{end}} data-action="jump#go"> Dark</label>
+</fieldset>
+<button class="button button--quiet" type="submit" data-jump-target="button">Save</button>
+</form>
+</section>
+
+<section class="card" id="languages" aria-labelledby="languages-title">
+<h2 class="card__title" id="languages-title">Search languages</h2>
+<p class="card__help">Search finds other forms of a word in the languages ticked here. Tick only the ones you write in: each extra one makes matches looser. Every other language is still found by exact word.</p>
+{{template "settings-note" (dict "Card" "languages" "Page" .)}}
+<form method="post" action="/settings/languages">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<fieldset class="checks"><legend class="visually-hidden">Languages</legend>
+{{range .Languages}}<label class="choice"><input type="checkbox" name="lang" value="{{.Code}}"{{if .Checked}} checked{{end}}> {{.Name}}</label>
+{{end}}</fieldset>
+<div class="card__foot"><button class="button" type="submit">Save and rebuild the index</button><p class="card__note">{{.IndexNote}}</p></div>
+</form>
+</section>
+
+<section class="card" id="attachments" aria-labelledby="attachments-title">
+<h2 class="card__title" id="attachments-title">Attachments</h2>
+<p class="card__help">Files up to this size are downloaded as messages arrive. Larger ones are listed with a Fetch now button.</p>
+{{template "settings-note" (dict "Card" "attachments" "Page" .)}}
+<form method="post" action="/settings/attachments" class="inline-form">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<div class="field field--short"><label for="limit_mb">Largest automatic download, in MB</label><input id="limit_mb" name="limit_mb" type="number" min="0" max="100000" value="{{.LimitMB}}" required></div>
+<button class="button" type="submit">Save</button>
+</form>
+</section>
+
+<section class="card" id="password" aria-labelledby="password-title">
+<h2 class="card__title" id="password-title">Password</h2>
+{{if .EnvPassword}}<p class="card__help">The password comes from ARC5_PASSWORD. To change it, change that setting and restart arc5; every browser is then signed out.</p>
+{{template "settings-note" (dict "Card" "password" "Page" .)}}
+{{else}}<p class="card__help">Changing it signs out every other browser.</p>
+{{template "settings-note" (dict "Card" "password" "Page" .)}}
+<form method="post" action="/settings/password" class="inline-form">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<div class="field"><label for="current">Current password</label><input id="current" name="current" type="password" autocomplete="current-password" required></div>
+<div class="field"><label for="new">New password</label><input id="new" name="new" type="password" autocomplete="new-password" minlength="8" required></div>
+<button class="button" type="submit">Change password</button>
+</form>{{end}}
+</section>
+
+<div class="page-links"><a href="/sources">Manage sources</a><form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link-button link-button--accent" type="submit">Sign out</button></form></div>
+</main>
+</body>
+</html>{{end}}
+
+{{define "settings-note"}}{{if eq .Page.ProblemCard .Card}}<p class="alert" role="alert">{{.Page.Problem}}</p>{{else if eq .Page.Saved .Card}}<p class="saved" role="status">Saved.{{if eq .Card "password"}} Every other browser is signed out.{{end}}{{if eq .Card "languages"}} The index is being rebuilt in the background.{{end}}</p>{{end}}{{end}}

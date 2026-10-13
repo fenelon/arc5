@@ -26,6 +26,17 @@ func (s *Store) SetSetting(key, value string) error {
 	return err
 }
 
+// SetSettingIfAbsent stores a setting only if it has no value yet, and
+// reports whether it did.
+func (s *Store) SetSettingIfAbsent(key, value string) (bool, error) {
+	res, err := s.w.Exec(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING`, key, value)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
 func mediaCap(q queryer) (int64, error) {
 	var v string
 	err := q.QueryRow(`SELECT value FROM settings WHERE key = ?`, mediaCapKey).Scan(&v)

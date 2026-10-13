@@ -219,8 +219,11 @@ func TestFilters(t *testing.T) {
 	if got := q(func(q *Query) { q.IncludeService = true }); !slices.Contains(got, service) {
 		t.Errorf("with service messages = %v", got)
 	}
-	if got := q(func(q *Query) { q.AccountID = other }); !same(got, "other") {
+	if got := q(func(q *Query) { q.AccountIDs = []int64{other} }); !same(got, "other") {
 		t.Errorf("by account = %v", got)
+	}
+	if got := q(func(q *Query) { q.AccountIDs = []int64{f.acc, other} }); !same(got, plain, inGroup, fromBob, withFile, deleted, "other") {
+		t.Errorf("by two accounts = %v", got)
 	}
 	if got := q(func(q *Query) { q.ChatID = f.id("chats", "g1") }); !same(got, inGroup) {
 		t.Errorf("by chat = %v", got)
@@ -238,7 +241,7 @@ func TestFilters(t *testing.T) {
 	if got := q(func(q *Query) { q.From, q.To = day.Add(2*time.Minute), day.Add(4*time.Minute) }); !same(got, inGroup, fromBob) {
 		t.Errorf("by date = %v", got)
 	}
-	if got := q(func(q *Query) { q.AccountID, q.HasAttachment, q.DeletedOnly = f.acc, true, true }); len(got) != 0 {
+	if got := q(func(q *Query) { q.AccountIDs, q.HasAttachment, q.DeletedOnly = []int64{f.acc}, true, true }); len(got) != 0 {
 		t.Errorf("filters must combine with AND: %v", got)
 	}
 }
@@ -323,6 +326,13 @@ func TestHitCarriesWhatAResultRowShows(t *testing.T) {
 	}
 	if got := render(h.Snippet); got != "The [cats] are sleeping" {
 		t.Errorf("snippet = %q", got)
+	}
+	if h.ChatKind != model.ChatPrivate || h.Outgoing {
+		t.Errorf("chat kind %q, outgoing %v", h.ChatKind, h.Outgoing)
+	}
+	f.say("my cats too", func(m *model.Message) { m.Outgoing = true })
+	if mine := f.page(Query{Text: "my "}).Hits; len(mine) != 1 || !mine[0].Outgoing {
+		t.Errorf("the owner's message = %+v", mine)
 	}
 }
 

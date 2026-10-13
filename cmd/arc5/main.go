@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -19,6 +18,7 @@ import (
 	"github.com/fenelon/arc5/internal/config"
 	"github.com/fenelon/arc5/internal/connector"
 	"github.com/fenelon/arc5/internal/connector/demo"
+	"github.com/fenelon/arc5/internal/indexer"
 	"github.com/fenelon/arc5/internal/search"
 	"github.com/fenelon/arc5/internal/web"
 )
@@ -27,10 +27,6 @@ const usage = `usage:
   arc5 serve   [--listen address] [--data folder]
   arc5 reindex [--data folder] [--languages en,ru,es]
   arc5 demo    [--data folder]`
-
-// languagesKey is the setting that holds the languages search stems, as
-// comma-separated codes.
-const languagesKey = "search_languages"
 
 // The demo connector is registered once per process, so the sample archive's
 // source shows as live.
@@ -75,22 +71,6 @@ func run(ctx context.Context, args []string, getenv func(string) string, ready f
 	}
 }
 
-// loadAnalyzer builds the search analyzer for the languages in settings.
-func loadAnalyzer(store *archive.Store) (*search.Analyzer, error) {
-	setting, ok, err := store.Setting(languagesKey)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		setting = search.DefaultLanguages
-	}
-	analyzer, err := search.NewAnalyzer(search.ParseLanguages(setting))
-	if err != nil {
-		return nil, fmt.Errorf("%s setting: %w", languagesKey, err)
-	}
-	return analyzer, nil
-}
-
 func serve(ctx context.Context, cfg config.Config, ready func(addr string)) error {
 	store, err := archive.Open(cfg.DataDir)
 	if err != nil {
@@ -98,12 +78,7 @@ func serve(ctx context.Context, cfg config.Config, ready func(addr string)) erro
 	}
 	defer store.Close()
 
-	analyzer, err := loadAnalyzer(store)
-	if err != nil {
-		return err
-	}
-	store.SetAnalyzer(analyzer)
-	current, err := store.IndexCurrent()
+	index, err := indexer.Load(store)
 	if err != nil {
 		return err
 	}
@@ -117,33 +92,22 @@ func serve(ctx context.Context, cfg config.Config, ready func(addr string)) erro
 	// whichever way serve returns.
 	ctx, cancel := context.WithCancel(ctx)
 	runner := connector.NewRunner(store, connector.Default)
-	var background sync.WaitGroup
 	defer func() {
 		cancel()
 		runner.Wait()
-		background.Wait()
+		index.Wait()
 	}()
 
-	if !current {
-		background.Add(1)
-		go func() {
-			defer background.Done()
-			log.Printf("rebuilding the search index for %s", analyzer.Signature())
-			if err := store.Reindex(ctx, nil); err != nil {
-				if ctx.Err() == nil {
-					log.Printf("search index rebuild failed: %v", err)
-				}
-				return
-			}
-			log.Printf("search index rebuilt")
-		}()
+	if err := index.Start(ctx); err != nil {
+		ln.Close()
+		return err
 	}
 	if err := runner.Start(ctx); err != nil {
 		ln.Close()
 		return err
 	}
 
-	site, err := web.New(web.Deps{Store: store, Runner: runner, Registry: connector.Default, EnvPassword: cfg.Password})
+	site, err := web.New(web.Deps{Store: store, Runner: runner, Registry: connector.Default, Index: index, EnvPassword: cfg.Password})
 	if err != nil {
 		ln.Close()
 		return err
@@ -181,21 +145,20 @@ func reindex(ctx context.Context, cfg config.Reindex) error {
 		if err != nil {
 			return err
 		}
-		if err := store.SetSetting(languagesKey, strings.Join(chosen.Languages(), ",")); err != nil {
+		if err := store.SetSetting(indexer.LanguagesKey, strings.Join(chosen.Languages(), ",")); err != nil {
 			return err
 		}
 	}
-	analyzer, err := loadAnalyzer(store)
+	index, err := indexer.Load(store)
 	if err != nil {
 		return err
 	}
-	store.SetAnalyzer(analyzer)
 
 	indexed := 0
 	if err := store.Reindex(ctx, func(done, total int) { indexed = done }); err != nil {
 		return err
 	}
-	languages := strings.Join(analyzer.Languages(), ", ")
+	languages := strings.Join(index.Status().Languages, ", ")
 	if languages == "" {
 		languages = "none"
 	}
@@ -211,12 +174,11 @@ func seedDemo(cfg config.Demo) error {
 	}
 	defer store.Close()
 
-	// With the analyzer set, the sample messages are indexed as they are written.
-	analyzer, err := loadAnalyzer(store)
-	if err != nil {
+	// Loading the indexer sets the analyzer, so the sample messages are
+	// indexed as they are written.
+	if _, err := indexer.Load(store); err != nil {
 		return err
 	}
-	store.SetAnalyzer(analyzer)
 
 	seeded, err := demo.Seed(store)
 	if err != nil {

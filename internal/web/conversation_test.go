@@ -201,8 +201,13 @@ func TestAttachmentModes(t *testing.T) {
 	if strings.Count(body, "<img ") != 1 {
 		t.Error("something other than the one photo is drawn as an image")
 	}
-	if got := strings.Count(body, `name="csrf"`); got != 4 {
-		t.Errorf("%d CSRF fields; want the sign-out form plus three fetch forms", got)
+	if got := strings.Count(body, `name="csrf"`); got != 3 {
+		t.Errorf("%d CSRF fields; want the page's token plus two fetch forms", got)
+	}
+	// View-once media the source chose not to keep is not offered for fetching.
+	once := body[strings.Index(body, "once.jpg"):strings.Index(body, "Sent as view-once")]
+	if strings.Contains(once, "Fetch now") {
+		t.Error("withheld view-once media offers Fetch now")
 	}
 }
 
@@ -291,4 +296,25 @@ func TestRailFollowsTheTimeZone(t *testing.T) {
 
 	has(t, s.page(path), fmt.Sprintf(`href="%s?date=2025-10-01" aria-label="October to December 2025, 1 message"`, path))
 	has(t, s.page(path+"?date=2025-10-01"), "happy new year")
+}
+
+// An edit made on a later day says which day.
+func TestEditedOnAnotherDayShowsTheDay(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	acc := s.account("Personal", "telegram")
+	s.say(acc, "Dan", "1", "first", noon)
+	s.say(acc, "Dan", "1", "second", noon, func(m *model.Message) { m.EditedAt = noon.Add(26 * time.Hour) })
+	body := s.page(fmt.Sprintf("/s/%d/c/%d", acc, s.chatID(acc, "Dan")))
+	has(t, body, "Edited on 29 Sep at 14:00, show earlier")
+}
+
+// The page tells the scroll controller to keep the newest message in view
+// while pictures above it load.
+func TestScrollControllerFollowsLoadingPictures(t *testing.T) {
+	s := newSite(t, "")
+	body := s.get(s.srv.asset("js/scroll_controller.js")).Body.String()
+	if !strings.Contains(body, `addEventListener("load"`) {
+		t.Error("the scroll controller does not scroll again when a picture loads")
+	}
 }

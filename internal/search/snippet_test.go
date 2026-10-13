@@ -94,3 +94,21 @@ func TestSnippetSurvivesOddText(t *testing.T) {
 		}
 	}
 }
+
+func TestHighlightMarksTheWholeText(t *testing.T) {
+	a := mustAnalyzer(t, "en", "ru")
+	s := New(nil, a)
+	long := strings.Repeat("filler words here ", 20) + "the cats sat"
+	for _, c := range []struct{ query, text, want string }{
+		{"cat", "The cats sat.\nThen a cat left.", "The [cats] sat.\nThen a [cat] left."},
+		{"кот", "Коты спят", "[Коты] спят"},
+		{"cats", long, strings.Repeat("filler words here ", 20) + "the [cats] sat"},
+		{"dog", "The cats sat.", "The cats sat."},
+		{"", "The cats sat.", "The cats sat."},
+		{"cat", "", ""},
+	} {
+		if got := render(s.Highlight(c.query, c.text)); got != c.want {
+			t.Errorf("Highlight(%q, %q) = %q, want %q", c.query, c.text, got, c.want)
+		}
+	}
+}

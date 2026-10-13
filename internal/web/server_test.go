@@ -1,6 +1,8 @@
 package web
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,18 +14,44 @@ import (
 
 	"github.com/fenelon/arc5/internal/archive"
 	"github.com/fenelon/arc5/internal/connector"
+	"github.com/fenelon/arc5/internal/indexer"
 )
 
 type fakeRunner struct {
-	status    []connector.Status
-	requested []int64
-	err       error
+	mu         sync.Mutex
+	status     []connector.Status
+	requested  []int64
+	restarted  []int64
+	signedOut  []int64
+	err        error
+	signOutErr error
 }
 
-func (f *fakeRunner) Status() []connector.Status { return f.status }
+func (f *fakeRunner) Status() []connector.Status {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]connector.Status(nil), f.status...)
+}
+
 func (f *fakeRunner) RequestMedia(id int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.requested = append(f.requested, id)
 	return f.err
+}
+
+func (f *fakeRunner) Restart(id int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.restarted = append(f.restarted, id)
+	return nil
+}
+
+func (f *fakeRunner) SignOut(_ context.Context, id int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.signedOut = append(f.signedOut, id)
+	return f.signOutErr
 }
 
 // site is a server with a browser's memory: it keeps cookies and the CSRF
@@ -33,6 +61,7 @@ type site struct {
 	store   *archive.Store
 	runner  *fakeRunner
 	reg     *connector.Registry
+	index   *indexer.Indexer
 	srv     *Server
 	cookies map[string]*http.Cookie
 	csrf    string
@@ -45,15 +74,21 @@ func newSite(t *testing.T, envPassword string) *site {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Close() })
-	s := &site{t: t, store: store, runner: &fakeRunner{}, reg: connector.NewRegistry(), cookies: map[string]*http.Cookie{}}
-	s.srv, err = New(Deps{Store: store, Runner: s.runner, Registry: s.reg, EnvPassword: envPassword, Location: time.UTC})
+	index, err := indexer.Load(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index.Logf = func(string, ...any) {}
+	t.Cleanup(index.Wait) // registered after the store's cleanup, so it runs first
+	s := &site{t: t, store: store, runner: &fakeRunner{}, reg: connector.NewRegistry(), index: index, cookies: map[string]*http.Cookie{}}
+	s.srv, err = New(Deps{Store: store, Runner: s.runner, Registry: s.reg, Index: index, EnvPassword: envPassword, Location: time.UTC})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return s
 }
 
-var csrfField = regexp.MustCompile(`name="csrf" value="([^"]+)"`)
+var csrfField = regexp.MustCompile(`name="csrf" (?:value|content)="([^"]+)"`)
 
 func (s *site) do(req *http.Request) *httptest.ResponseRecorder {
 	s.t.Helper()
@@ -127,7 +162,7 @@ func TestStaticFiles(t *testing.T) {
 		!strings.Contains(css.Header().Get("Cache-Control"), "immutable") || !strings.Contains(css.Body.String(), "--accent") {
 		t.Errorf("app.css: %d %v", css.Code, css.Header())
 	}
-	for _, name := range []string{"js/app.js", "js/stimulus.js", "js/theme_controller.js", "js/picker_controller.js",
+	for _, name := range []string{"js/app.js", "js/stimulus.js", "js/theme_controller.js", "js/picker_controller.js", "js/search_controller.js",
 		"fonts/geologica-latin-wght-normal.woff2", "fonts/geologica-cyrillic-wght-normal.woff2"} {
 		if rec := s.get(s.srv.asset(name)); rec.Code != http.StatusOK || rec.Body.Len() == 0 {
 			t.Errorf("%s: status %d, %d bytes", name, rec.Code, rec.Body.Len())
@@ -168,7 +203,8 @@ func TestFirstRunSetup(t *testing.T) {
 		}
 	}
 	s.signIn()
-	if rec := s.get("/"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "No sources yet") {
+	if rec := s.get("/"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "No sources yet") ||
+		!strings.Contains(rec.Body.String(), `href="/sources/new"`) {
 		t.Fatalf("home after setup: %d", rec.Code)
 	}
 }
@@ -323,5 +359,40 @@ func TestParallelLoginsAreThrottled(t *testing.T) {
 	}
 	if checked > 5 || checked+refused != tries {
 		t.Fatalf("%d wrong passwords were checked and %d refused; want at most 5 checked", checked, refused)
+	}
+}
+
+// Review Focus 2, for every route: no page without a session, and no change
+// without the session's token.
+func TestEveryRouteNeedsASessionAndEveryChangeTheToken(t *testing.T) {
+	s := newSite(t, "")
+	s.signIn()
+	acc := s.fakeAccount("Personal")
+	s.say(acc, "Dan", "1", "hello", noon)
+	chat := s.chatID(acc, "Dan")
+	gets := []string{"/", "/s/chats", fmt.Sprintf("/s/%d", acc), fmt.Sprintf("/s/%d/c/%d", acc, chat), fmt.Sprintf("/s/%d/results?q=x", acc),
+		"/media/1", "/sources", "/sources/new", fmt.Sprintf("/sources/%d", acc), fmt.Sprintf("/sources/%d/chats", acc),
+		fmt.Sprintf("/sources/%d/login", acc), "/settings"}
+	posts := []string{"/logout", "/media/1/fetch", "/sources/new", fmt.Sprintf("/sources/%d/name", acc), fmt.Sprintf("/sources/%d/settings", acc),
+		fmt.Sprintf("/sources/%d/signout", acc), fmt.Sprintf("/sources/%d/remove", acc), fmt.Sprintf("/sources/%d/chats", acc),
+		fmt.Sprintf("/sources/%d/login", acc), fmt.Sprintf("/sources/%d/login/cancel", acc),
+		"/settings/appearance", "/settings/languages", "/settings/attachments", "/settings/password"}
+
+	stranger := &site{t: t, store: s.store, srv: s.srv, cookies: map[string]*http.Cookie{}}
+	for _, path := range gets {
+		if rec := stranger.get(path); !redirectsTo(rec, "/login") {
+			t.Errorf("GET %s without a session: %d to %q", path, rec.Code, rec.Header().Get("Location"))
+		}
+	}
+	for _, path := range posts {
+		if rec := stranger.post(path, url.Values{"csrf": {s.csrf}}); !redirectsTo(rec, "/login") {
+			t.Errorf("POST %s without a session: %d", path, rec.Code)
+		}
+		if rec := s.post(path, url.Values{"csrf": {"made-up"}}); rec.Code != http.StatusForbidden {
+			t.Errorf("POST %s with a wrong token: %d, want 403", path, rec.Code)
+		}
+	}
+	if got, _ := s.store.Account(acc); !got.RemovedAt.IsZero() || got.Label != "Personal" {
+		t.Error("a refused request changed the source")
 	}
 }
