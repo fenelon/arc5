@@ -77,6 +77,8 @@ func TestMailInbox(t *testing.T) {
 		`<span class="avatar mrow__avatar" aria-hidden="true">DW</span>`, "Олег Ветров", "14 Jul",
 		fmt.Sprintf(`href="/s/%d/c/%d"`, m.box, m.thread("Monday planning, room 4")),
 		`placeholder="Search mail by word, sender, address or subject"`,
+		// The demo mailbox wears the mail logo in the picker.
+		`<summary class="picker__button" aria-label="Source: Home mail. Choose another source"><span class="logo logo--email"`,
 	)
 	lacks(t, body, "Trash", "Choose a chat on the left", "Show more chats")
 	// Only the club's reminder is wholly deleted: one tag in the list.

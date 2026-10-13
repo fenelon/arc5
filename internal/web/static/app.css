@@ -336,7 +336,7 @@ mark.hit{padding:0 2px;color:var(--hit-ink);background:var(--hit);border-radius:
 .settings-link svg{width:20px;height:20px}
 .plain--settings{max-width:760px;padding-top:28px}
 .card__title{font-weight:650;font-size:17px}
-.card__help{max-width:620px;margin-top:6px;color:var(--muted)}
+.card__help{max-width:620px;margin-top:6px;color:var(--muted);overflow-wrap:break-word}
 .card form{margin-top:14px}
 .card fieldset{margin:0;padding:0;border:0}
 .choices{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px}
@@ -411,10 +411,10 @@ mark.hit{padding:0 2px;color:var(--hit-ink);background:var(--hit);border-radius:
 .mcard--own .mcard__avatar{color:var(--accent-ink);background:var(--accent)}
 .mcard__who{flex:1 1 auto;min-width:0}
 .mcard__line{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.mcard[open] .mcard__line{white-space:normal;overflow-wrap:anywhere}
+.mcard[open] .mcard__line{white-space:normal;overflow-wrap:break-word}
 .mcard__name{font-weight:600}
 .mcard__address,.mcard__to{font-size:13.5px;color:var(--muted)}
-.mcard__to{display:none;overflow-wrap:anywhere}
+.mcard__to{display:none;overflow-wrap:break-word}
 .mcard[open] .mcard__to{display:block}
 .mcard__snippet{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:14px;color:var(--muted)}
 .mcard__snippet .tag{margin-right:4px}
@@ -444,6 +444,9 @@ mark.hit{padding:0 2px;color:var(--hit-ink);background:var(--hit);border-radius:
   .mail-head,.mrow{padding-left:14px;padding-right:14px}
   .thread{padding:14px 14px 28px}
   .mcard__body{padding:14px}
+  .mcard__head{flex-wrap:wrap}
+  .mcard__who{flex:1 1 0}
+  .mcard__meta{order:3;flex:1 1 100%;flex-direction:row;justify-content:flex-start;gap:10px;padding-left:48px}
   .only-phone{display:flex}
   .not-phone{display:none}
   .topbar{flex-wrap:wrap}

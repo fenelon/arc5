@@ -99,7 +99,7 @@ func logoFor(name string) string {
 	switch name {
 	case "telegram", "whatsapp":
 		return name
-	case "imap", "email":
+	case "imap", "email", "demo-mail":
 		return "email"
 	}
 	return "generic"

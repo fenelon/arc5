@@ -74,6 +74,8 @@ func TestThreadOpenedFromSearch(t *testing.T) {
 	if n := strings.Count(body, " open>"); n != 3 {
 		t.Errorf("%d cards open, want the target and the last two", n)
 	}
+	// The first is open, so the folded ones are not "the earliest".
+	has(t, body, "5 messages, 25 to 27 September 2026. Two are folded; select one to open it.")
 }
 
 func TestOriginalDownload(t *testing.T) {

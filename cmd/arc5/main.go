@@ -18,6 +18,7 @@ import (
 	"github.com/fenelon/arc5/internal/config"
 	"github.com/fenelon/arc5/internal/connector"
 	"github.com/fenelon/arc5/internal/connector/demo"
+	"github.com/fenelon/arc5/internal/connector/email"
 	"github.com/fenelon/arc5/internal/connector/telegram"
 	"github.com/fenelon/arc5/internal/indexer"
 	"github.com/fenelon/arc5/internal/search"
@@ -35,6 +36,7 @@ func init() {
 	demo.Register(connector.Default)
 	demo.RegisterMail(connector.Default)
 	telegram.Register(connector.Default)
+	email.Register(connector.Default)
 }
 
 func main() {

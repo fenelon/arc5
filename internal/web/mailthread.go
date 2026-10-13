@@ -49,15 +49,22 @@ type MailFile struct {
 
 var countWords = [...]string{"", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"}
 
-// foldedNote says how many of the earliest messages are folded.
-func foldedNote(n int) string {
+// foldedNote says how many messages are folded: the earliest ones, unless
+// one of those was opened (the message a search led to).
+func foldedNote(n int, earliest bool) string {
+	count := fmt.Sprint(n)
+	if n < len(countWords) {
+		count = countWords[n]
+	}
 	switch {
-	case n == 1:
+	case n == 1 && earliest:
 		return " The earliest is folded; select it to open it."
-	case n > 1 && n < len(countWords):
-		return fmt.Sprintf(" The %s earliest are folded; select one to open it.", countWords[n])
+	case n == 1:
+		return " One is folded; select it to open it."
+	case n > 1 && earliest:
+		return fmt.Sprintf(" The %s earliest are folded; select one to open it.", count)
 	case n > 1:
-		return fmt.Sprintf(" The %d earliest are folded; select one to open it.", n)
+		return fmt.Sprintf(" %s are folded; select one to open it.", strings.ToUpper(count[:1])+count[1:])
 	}
 	return ""
 }
@@ -134,7 +141,7 @@ func (s *Server) threadView(r *http.Request, sel selection, folder mailFolder, c
 	if len(msgs) > 0 {
 		view.Summary = plural(total, "message", "messages") + ", " + dateSpan(chat.FirstAt.In(loc), msgs[len(msgs)-1].SentAt.In(loc)) + "."
 	}
-	folded := 0
+	folded, earliest := 0, true // earliest: no open message comes before a folded one
 	for i, m := range msgs {
 		sent := m.SentAt.In(loc)
 		c := Card{
@@ -163,6 +170,9 @@ func (s *Server) threadView(r *http.Request, sel selection, folder mailFolder, c
 		} else {
 			c.When = sent.Format("2 Jan, 15:04")
 			folded++
+			if len(view.Cards) > 0 && view.Cards[len(view.Cards)-1].Open {
+				earliest = false
+			}
 		}
 		c.Snippet = snippet(m.Text)
 		c.Text, c.Lead, c.Quote = splitQuote(m.Text)
@@ -177,7 +187,7 @@ func (s *Server) threadView(r *http.Request, sel selection, folder mailFolder, c
 		}
 		view.Cards = append(view.Cards, c)
 	}
-	view.Summary += foldedNote(folded)
+	view.Summary += foldedNote(folded, earliest)
 	return view, true, nil
 }
 
