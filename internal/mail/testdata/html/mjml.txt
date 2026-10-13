@@ -1,0 +1,3 @@
+Your order has shipped
+Tracking number 12345. It should arrive on Thursday.
+Pay now (https://shop.example/pay)

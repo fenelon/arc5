@@ -52,8 +52,9 @@ type converter struct {
 	lists     []list
 	marker    string // a list item's marker, owed before its first text
 	pre       int
-	words     int // runes written from text nodes (not image descriptions)
-	nbsp      int // non-breaking spaces seen
+	words     int  // runes written from text nodes (not image descriptions)
+	nbsp      int  // non-breaking spaces seen
+	zeroFont  bool // inside an element whose text has a font size of zero
 }
 
 type list struct {
@@ -102,7 +103,60 @@ func (c *converter) children(n *html.Node) {
 	}
 }
 
+// element writes an element, keeping track of a zero font size: responsive
+// layouts set font-size:0 on wrappers to remove gaps between blocks, and
+// their content sets its own size again. Text is dropped only where the
+// size in force is zero.
 func (c *converter) element(n *html.Node) {
+	was := c.zeroFont
+	switch fontSize(compactStyle(n)) {
+	case sizeZero:
+		c.zeroFont = true
+	case sizeAbsolute:
+		c.zeroFont = false
+	}
+	c.elementWithin(n)
+	c.zeroFont = was
+}
+
+const (
+	sizeNone     = iota // the element sets no font size
+	sizeZero            // font-size:0
+	sizeRelative        // a size relative to the parent's, such as 0.9em: zero stays zero
+	sizeAbsolute        // any other size
+)
+
+// fontSize reads the last font-size an element's compact style sets.
+func fontSize(style string) int {
+	result := sizeNone
+	for i := 0; ; {
+		j := strings.Index(style[i:], "font-size:")
+		if j < 0 {
+			return result
+		}
+		at := i + j
+		i = at + 1
+		if at > 0 && style[at-1] != ';' && style[at-1] != '"' && style[at-1] != '\'' {
+			continue // part of another property's name
+		}
+		value := style[at+len("font-size:"):]
+		if end := strings.IndexAny(value, ";!"); end >= 0 {
+			value = value[:end]
+		}
+		switch {
+		case value == "":
+		case value[0] == '0' && (len(value) == 1 || (value[1] != '.' && (value[1] < '0' || value[1] > '9'))):
+			result = sizeZero
+		case strings.HasSuffix(value, "%") || (strings.HasSuffix(value, "em") && !strings.HasSuffix(value, "rem")) ||
+			value == "smaller" || value == "larger" || value == "inherit":
+			result = sizeRelative
+		default:
+			result = sizeAbsolute
+		}
+	}
+}
+
+func (c *converter) elementWithin(n *html.Node) {
 	tag := n.Data
 	if skipped[tag] || hidden(n) {
 		return
@@ -263,6 +317,9 @@ func invisible(r rune) bool {
 // text writes a run of text, collapsing whitespace as a browser does, or
 // keeping it inside <pre>. words is false for an image's description.
 func (c *converter) text(s string, words bool) {
+	if c.zeroFont && words {
+		return // a zero font size: the reader sees nothing of it
+	}
 	if c.pre > 0 {
 		for i, line := range strings.Split(s, "\n") {
 			if i > 0 {
@@ -439,7 +496,9 @@ func hidden(n *html.Node) bool {
 	if style == "" {
 		return false
 	}
-	for _, rule := range []string{"display:none", "visibility:hidden", "mso-hide:all", "max-height:0", "font-size:0", "opacity:0"} {
+	// mso-hide hides from Outlook only (its Outlook twin is in a comment);
+	// a zero font size is handled as the inherited property it is.
+	for _, rule := range []string{"display:none", "visibility:hidden", "max-height:0", "opacity:0"} {
 		if hasRule(style, rule) {
 			return true
 		}

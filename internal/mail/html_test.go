@@ -87,6 +87,11 @@ func TestHTMLTextEdgeCases(t *testing.T) {
 		"<blockquote><blockquote>deep</blockquote></blockquote>": "> > deep",
 		"<ul><li></li><li>only</li></ul>":                        "• only",
 		"<p>a</p><!-- comment --><p>b</p>":                       "a\n\nb",
+		// A zero font size is inherited; a child that sets its own is seen.
+		`<td style="font-size:0px;padding:10px 25px"><div style="font-size:13px">Your order has shipped. Tracking number 12345.</div></td>`: "Your order has shipped. Tracking number 12345.",
+		`<div style="font-size:0">gap<span style="font-size:0.9em">still hidden</span></div>`:                                               "",
+		// mso-hide hides from Outlook only.
+		`<a style="mso-hide:all">Pay now</a>`: "Pay now",
 	} {
 		if got := HTMLText([]byte(in), "utf-8"); got != want {
 			t.Errorf("%q: %q, want %q", in, got, want)

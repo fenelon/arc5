@@ -222,8 +222,12 @@ Rules:
   `<script>`, `<noscript>`, `<template>`, `<svg>`, `<object>`, comments
   (including Outlook's `<!--[if mso]>` conditional blocks), and elements
   hidden with `display:none`, `visibility:hidden`, `max-height:0`,
-  `font-size:0`, `opacity:0` or the `hidden` attribute (the hidden
-  "preheader" a newsletter puts before its content).
+  `opacity:0` or the `hidden` attribute (the hidden "preheader" a
+  newsletter puts before its content). Text whose font size in force is
+  zero is dropped too, but `font-size:0` is inherited as in a browser:
+  responsive (MJML) layouts put it on wrappers and set a size again on the
+  content, which is kept. `mso-hide:all` hides only from Outlook, so it
+  hides nothing here.
 - **Blocks:** `p`, `div`, `table`, `tr`, `li`, `h1` to `h6`, `blockquote`,
   `pre`, `section`, `article`, `header`, `footer`, `address`, `center`,
   `form`, `hr` and similar start a new line; paragraphs, headings, tables
