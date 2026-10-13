@@ -37,6 +37,7 @@ type history struct {
 	failNext error
 	failGaps error            // the answer to every request with a lower bound
 	refuse   map[string]error // chats Telegram will not serve
+	quiet    map[string]int   // days since a chat's newest message
 }
 
 var day0 = time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)
@@ -47,7 +48,7 @@ func (h *history) peerOf(chat string) tg.PeerClass {
 }
 
 func (h *history) messageDate(chat string, id int) int {
-	return int(day0.AddDate(0, 0, id-h.counts[chat]).Unix())
+	return int(day0.AddDate(0, 0, id-h.counts[chat]-h.quiet[chat]).Unix())
 }
 
 func (h *history) fetch(peer tg.InputPeerClass, offsetID, minID, limit int) (historyPage, error) {
@@ -265,5 +266,25 @@ func TestBackfillSkipsAChatTelegramRefuses(t *testing.T) {
 	backfilled(t, h, sink, signedIn(t), nil)
 	if got := sink.texts("chat:10"); len(got) != 3 {
 		t.Errorf("the chat after the refused one = %v", got)
+	}
+}
+
+// Review finding: a chat with nothing young enough for a short age limit
+// was marked as fully fetched, so a longer limit never fetched it.
+func TestALongerLimitReachesQuietChats(t *testing.T) {
+	h := &history{counts: map[string]int{"user:1": 5, "chat:10": 3}, quiet: map[string]int{"chat:10": 200}}
+	sink, state := newMemSink(), signedIn(t)
+	backfilled(t, h, sink, state, map[string]string{"age": "Last 3 months"})
+	if got := sink.texts("chat:10"); len(got) != 0 {
+		t.Fatalf("older than three months, yet stored: %v", got)
+	}
+	h.calls = nil
+	backfilled(t, h, sink, state, map[string]string{"age": "Last 3 months"})
+	if got := h.callsFor("chat:10"); len(got) != 0 {
+		t.Errorf("a chat at its limit is asked for again on every run: %v", got)
+	}
+	backfilled(t, h, sink, state, map[string]string{"age": "All history"})
+	if got := sink.texts("chat:10"); len(got) != 3 {
+		t.Errorf("after choosing all history: %v", got)
 	}
 }

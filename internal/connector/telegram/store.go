@@ -55,12 +55,14 @@ func saveCredentials(state connector.State, c credentials) error {
 }
 
 // checkpoint is how far back a chat's history has been fetched: the oldest
-// message stored, its date, and whether the chat's first message was
-// reached. A chat stopped by the age limit resumes when the limit grows.
+// message stored, its date, whether the chat's first message was reached,
+// and the age limit (Unix time) that stopped the fetching, if one did. A
+// chat stopped by the age limit resumes when the limit grows.
 type checkpoint struct {
 	Oldest     int   `json:"oldest"`
 	OldestDate int64 `json:"oldest_date"`
 	Start      bool  `json:"start"`
+	Limit      int64 `json:"limit,omitempty"`
 }
 
 func loadCheckpoint(state connector.State, chat string) (checkpoint, error) {

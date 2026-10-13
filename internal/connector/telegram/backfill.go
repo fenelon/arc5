@@ -49,8 +49,8 @@ func (r *run) backfillChat(ctx context.Context, chat string) error {
 		return err
 	}
 	limit := r.opts.oldest
-	if cp.Start || (!limit.IsZero() && cp.Oldest != 0 && cp.OldestDate <= limit.Unix()) {
-		return nil // the start of the chat, or the age limit, was reached before
+	if cp.Start || (cp.Limit != 0 && !limit.IsZero() && limit.Unix() >= cp.Limit) {
+		return nil // the start of the chat, or this age limit, was reached before
 	}
 	peer, ok := r.inputPeer(chat)
 	if !ok {
@@ -89,9 +89,7 @@ func (r *run) backfillChat(ctx context.Context, chat string) error {
 			}
 		}
 		if reached {
-			if cp.Oldest == 0 {
-				cp.Start = true // nothing in the chat is young enough
-			}
+			cp.Limit = limit.Unix()
 			return saveCheckpoint(r.state, chat, cp)
 		}
 		if err := saveCheckpoint(r.state, chat, cp); err != nil {
