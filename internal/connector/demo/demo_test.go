@@ -124,6 +124,9 @@ type progressSink struct {
 	reported chan connector.Progress
 }
 
+// RequestedMedia never delivers: nobody asks this sink for files.
+func (p *progressSink) RequestedMedia() <-chan model.AttachmentRef { return nil }
+
 func (s *progressSink) ReportProgress(p connector.Progress) { s.reported <- p }
 
 // memState is a connector.State in memory.
@@ -183,4 +186,34 @@ func TestDemoIsHiddenButHasSettingsAndALogin(t *testing.T) {
 	}
 	stop()
 	<-done
+}
+
+// fetchSink records what the demo does with a request to fetch a file.
+type fetchSink struct {
+	connector.Sink
+	requests chan model.AttachmentRef
+	statuses chan model.AttachmentStatus
+}
+
+func (f *fetchSink) RequestedMedia() <-chan model.AttachmentRef { return f.requests }
+func (f *fetchSink) ReportProgress(connector.Progress)          {}
+func (f *fetchSink) SetAttachmentStatus(_ model.AttachmentRef, s model.AttachmentStatus, _ string) error {
+	f.statuses <- s
+	return nil
+}
+
+func TestDemoAnswersFetchRequests(t *testing.T) {
+	sink := &fetchSink{requests: make(chan model.AttachmentRef, 1), statuses: make(chan model.AttachmentStatus, 1)}
+	sink.requests <- model.AttachmentRef{ChatSourceID: "dan", MessageSourceID: "1"}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go idle{}.Run(ctx, sink, memState{}, nil)
+	select {
+	case s := <-sink.statuses:
+		if s != model.StatusUnavailable {
+			t.Errorf("status = %q, want unavailable", s)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the demo never answered the request")
+	}
 }

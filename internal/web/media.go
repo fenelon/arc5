@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"io/fs"
 	"mime"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fenelon/arc5/internal/archive"
+	"github.com/fenelon/arc5/internal/model"
 )
 
 // mediaPolicy stops a file from running script or loading anything, even if a
@@ -35,6 +37,10 @@ func (s *Server) serveMedia(w http.ResponseWriter, r *http.Request, _ archive.Se
 		return
 	}
 	f, err := os.Open(file.Path)
+	if errors.Is(err, fs.ErrNotExist) {
+		http.Error(w, "This file is missing from the data folder.", http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		s.fail(w, err)
 		return
@@ -82,6 +88,11 @@ func (s *Server) fetchMedia(w http.ResponseWriter, r *http.Request, _ archive.Se
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		http.NotFound(w, r)
+		return
+	}
+	file, err := s.deps.Store.AttachmentFile(id)
+	if err == nil && file.Ephemeral && file.Status == model.StatusSkipped {
+		http.Error(w, "Self-destructing media is fetched only when its source is set to keep it.", http.StatusConflict)
 		return
 	}
 	switch err := s.deps.Runner.RequestMedia(id); {

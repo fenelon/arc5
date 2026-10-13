@@ -201,8 +201,13 @@ func TestAttachmentModes(t *testing.T) {
 	if strings.Count(body, "<img ") != 1 {
 		t.Error("something other than the one photo is drawn as an image")
 	}
-	if got := strings.Count(body, `name="csrf"`); got != 4 {
-		t.Errorf("%d CSRF fields; want the sign-out form plus three fetch forms", got)
+	if got := strings.Count(body, `name="csrf"`); got != 3 {
+		t.Errorf("%d CSRF fields; want the page's token plus two fetch forms", got)
+	}
+	// View-once media the source chose not to keep is not offered for fetching.
+	once := body[strings.Index(body, "once.jpg"):strings.Index(body, "Sent as view-once")]
+	if strings.Contains(once, "Fetch now") {
+		t.Error("withheld view-once media offers Fetch now")
 	}
 }
 

@@ -36,8 +36,17 @@ func (idle) Run(ctx context.Context, sink connector.Sink, state connector.State,
 		return errors.Join(connector.ErrNeedsLogin, err)
 	}
 	sink.ReportProgress(connector.Progress{Phase: connector.PhaseLive})
-	<-ctx.Done()
-	return ctx.Err()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case ref := <-sink.RequestedMedia():
+			// "Fetch now" on a sample file: there is nothing to fetch.
+			if err := sink.SetAttachmentStatus(ref, model.StatusUnavailable, "the demo has no files to fetch"); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (idle) Setup(state connector.State) connector.SetupFlow { return &login{state: state} }

@@ -57,7 +57,7 @@ type Version struct {
 
 type Attachment struct {
 	ID        int64
-	Mode      string // image, audio, video, file, skipped, pending, failed or unavailable
+	Mode      string // image, audio, video, file, skipped, withheld, pending, failed or unavailable
 	Name      string
 	Detail    string
 	URL       string
@@ -125,6 +125,9 @@ func attachmentView(a archive.StoredAttachment) Attachment {
 		}
 	case model.StatusSkipped:
 		v.Mode, v.Detail = "skipped", size+", not downloaded: "+a.Reason
+		if a.Ephemeral {
+			v.Mode = "withheld" // kept out by the source's setting; never fetched on request
+		}
 	case model.StatusFailed:
 		v.Mode, v.Detail = "failed", "The download failed: "+a.Reason
 	case model.StatusUnavailable:
