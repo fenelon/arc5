@@ -11,7 +11,7 @@
 
 services:
   arc5:
-    image: fenelon/arc5:latest
+    image: ellinp/arc5:latest
     container_name: arc5
     restart: unless-stopped
     # DSM governs a shared folder's permissions with its own access lists,

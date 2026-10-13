@@ -31,7 +31,7 @@ With Docker:
 
 ```sh
 docker run -d --name arc5 -p 8080:8080 -v arc5-data:/data \
-  -e TZ=Europe/Amsterdam fenelon/arc5
+  -e TZ=Europe/Amsterdam ellinp/arc5
 ```
 
 Open <http://localhost:8080> and choose a password. The image runs on amd64 and
@@ -42,7 +42,7 @@ With Docker Compose:
 ```yaml
 services:
   arc5:
-    image: fenelon/arc5:latest
+    image: ellinp/arc5:latest
     restart: unless-stopped
     ports: ["8080:8080"]
     environment:
