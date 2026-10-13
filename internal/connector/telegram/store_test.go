@@ -118,10 +118,10 @@ func TestCheckpointsAndCredentials(t *testing.T) {
 	if c, err := loadCheckpoint(state, "user:1"); err != nil || c != (checkpoint{}) {
 		t.Fatalf("no checkpoint yet = %+v, %v", c, err)
 	}
-	if err := saveCheckpoint(state, "user:1", checkpoint{Oldest: 500, Done: true}); err != nil {
+	if err := saveCheckpoint(state, "user:1", checkpoint{Oldest: 500, OldestDate: 1700000000, Start: true}); err != nil {
 		t.Fatal(err)
 	}
-	if c, _ := loadCheckpoint(state, "user:1"); c != (checkpoint{Oldest: 500, Done: true}) {
+	if c, _ := loadCheckpoint(state, "user:1"); c != (checkpoint{Oldest: 500, OldestDate: 1700000000, Start: true}) {
 		t.Errorf("checkpoint = %+v", c)
 	}
 	if top, err := loadTop(state, "user:1"); err != nil || top != 0 {

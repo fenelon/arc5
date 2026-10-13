@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fenelon/arc5/internal/connector"
+	"github.com/fenelon/arc5/internal/model"
 )
 
 // Name is the connector's name, stored on each Telegram account.
@@ -106,9 +107,11 @@ type run struct {
 	hashes *updateStorage
 	selfID int64
 
-	mu    sync.Mutex
-	e     *entities // every user and chat seen, for names and peers
-	order []string  // chats by recent activity, newest first
+	mu      sync.Mutex
+	e       *entities               // every user and chat seen, for names and peers
+	order   []string                // chats by recent activity, newest first
+	senders map[string]model.Sender // senders stored by this run, as stored
+	paced   bool                    // a history request has been made
 }
 
 // Run archives the account until ctx ends: it brings the chat list up to
