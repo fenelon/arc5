@@ -14,6 +14,7 @@ import (
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
 
+	"github.com/fenelon/arc5/internal/archive"
 	"github.com/fenelon/arc5/internal/connector"
 	"github.com/fenelon/arc5/internal/model"
 )
@@ -262,5 +263,21 @@ func TestAFullDiskStopsTheDownloads(t *testing.T) {
 	}
 	if len(sink.statuses) != 0 {
 		t.Errorf("statuses = %v; nothing should be marked failed", sink.statuses)
+	}
+}
+
+func TestAStaleDownloadIsDropped(t *testing.T) {
+	dl := &downloads{}
+	sink := newMemSink()
+	sink.failMedia = fmt.Errorf("%w: replaced by an edit", archive.ErrUnknownAttachment)
+	r, _ := newTestRun(t, &fakeConn{download: dl.download}, sink)
+	r.store(photoMessage(1, 101, 1), true)
+	r.store(photoMessage(2, 102, 1), true)
+	working(t, r, "both tried", func() bool { return len(dl.files()) >= 2 })
+	if got := dl.files(); len(got) != 2 {
+		t.Errorf("a stale download was retried: %v", got)
+	}
+	if len(sink.statuses) != 0 {
+		t.Errorf("statuses = %v; a stale ref must not mark anything", sink.statuses)
 	}
 }

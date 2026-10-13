@@ -25,11 +25,12 @@ const attachmentByRef = `
 	SELECT a.id FROM attachments a
 	JOIN messages m ON m.id = a.message_id
 	JOIN chats c ON c.id = m.chat_id
-	WHERE c.account_id = ? AND c.source_id = ? AND m.source_id = ? AND a.position = ?`
+	WHERE c.account_id = ? AND c.source_id = ? AND m.source_id = ? AND a.position = ?
+	  AND (? = '' OR a.source_id = '' OR a.source_id = ?)`
 
 func (s *Store) attachmentID(accountID int64, ref model.AttachmentRef) (int64, error) {
 	var id int64
-	err := s.w.QueryRow(attachmentByRef, accountID, ref.ChatSourceID, ref.MessageSourceID, ref.Position).Scan(&id)
+	err := s.w.QueryRow(attachmentByRef, accountID, ref.ChatSourceID, ref.MessageSourceID, ref.Position, ref.SourceID, ref.SourceID).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, fmt.Errorf("%w: %+v", ErrUnknownAttachment, ref)
 	}
@@ -249,10 +250,10 @@ func (s *Store) RequestMedia(attachmentID int64) (int64, model.AttachmentRef, er
 		ref       model.AttachmentRef
 	)
 	err = tx.QueryRow(`
-		SELECT c.account_id, c.source_id, m.source_id, a.position FROM attachments a
+		SELECT c.account_id, c.source_id, m.source_id, a.position, a.source_id FROM attachments a
 		JOIN messages m ON m.id = a.message_id
 		JOIN chats c ON c.id = m.chat_id
-		WHERE a.id = ?`, attachmentID).Scan(&accountID, &ref.ChatSourceID, &ref.MessageSourceID, &ref.Position)
+		WHERE a.id = ?`, attachmentID).Scan(&accountID, &ref.ChatSourceID, &ref.MessageSourceID, &ref.Position, &ref.SourceID)
 	if err != nil {
 		return 0, model.AttachmentRef{}, err
 	}
@@ -261,12 +262,23 @@ func (s *Store) RequestMedia(attachmentID int64) (int64, model.AttachmentRef, er
 
 // RequestedMedia lists an account's attachments waiting on an explicit request.
 func (s *Store) RequestedMedia(accountID int64) ([]model.AttachmentRef, error) {
+	return s.pendingMedia(accountID, true)
+}
+
+// PendingMedia lists an account's attachments still waiting to be
+// downloaded that nobody asked for by hand, so a connector that restarted
+// can queue them again.
+func (s *Store) PendingMedia(accountID int64) ([]model.AttachmentRef, error) {
+	return s.pendingMedia(accountID, false)
+}
+
+func (s *Store) pendingMedia(accountID int64, requested bool) ([]model.AttachmentRef, error) {
 	rows, err := s.r.Query(`
-		SELECT c.source_id, m.source_id, a.position FROM attachments a
+		SELECT c.source_id, m.source_id, a.position, a.source_id FROM attachments a
 		JOIN messages m ON m.id = a.message_id
 		JOIN chats c ON c.id = m.chat_id
-		WHERE a.requested = 1 AND a.status = 'pending' AND c.account_id = ?
-		ORDER BY a.id`, accountID)
+		WHERE a.requested = ? AND a.status = 'pending' AND a.position >= 0 AND c.account_id = ?
+		ORDER BY a.id`, b2i(requested), accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +286,7 @@ func (s *Store) RequestedMedia(accountID int64) ([]model.AttachmentRef, error) {
 	var out []model.AttachmentRef
 	for rows.Next() {
 		var ref model.AttachmentRef
-		if err := rows.Scan(&ref.ChatSourceID, &ref.MessageSourceID, &ref.Position); err != nil {
+		if err := rows.Scan(&ref.ChatSourceID, &ref.MessageSourceID, &ref.Position, &ref.SourceID); err != nil {
 			return nil, err
 		}
 		out = append(out, ref)

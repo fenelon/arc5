@@ -170,14 +170,14 @@ func (s *Store) UpsertMessage(accountID int64, m model.Message) ([]model.Attachm
 		}
 	}
 
-	rows, err := tx.Query(`SELECT position FROM attachments WHERE message_id = ? AND status = 'pending' ORDER BY position`, id)
+	rows, err := tx.Query(`SELECT position, source_id FROM attachments WHERE message_id = ? AND status = 'pending' AND position >= 0 ORDER BY position`, id)
 	if err != nil {
 		return nil, err
 	}
 	var pending []model.AttachmentRef
 	for rows.Next() {
 		ref := model.AttachmentRef{ChatSourceID: m.ChatSourceID, MessageSourceID: m.SourceID}
-		if err := rows.Scan(&ref.Position); err != nil {
+		if err := rows.Scan(&ref.Position, &ref.SourceID); err != nil {
 			rows.Close()
 			return nil, err
 		}

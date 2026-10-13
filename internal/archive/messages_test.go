@@ -567,3 +567,37 @@ func TestReplacedMediaKeepsTheEditsDate(t *testing.T) {
 		t.Errorf("replaced = %+v, %v; want it replaced at the edit's time", replaced, err)
 	}
 }
+
+// Review finding: a download queued for a file an edit then replaced landed
+// on the replacement, because refs named only a position.
+func TestAStaleRefCannotTouchTheReplacement(t *testing.T) {
+	s := openTemp(t)
+	acc := seedChat(t, s)
+	m := textMsg("1", "look")
+	m.Attachments = []model.Attachment{{Kind: model.AttachPhoto, Size: 1, SourceID: "photo:x"}}
+	refs := mustUpsert(t, s, acc, m)
+	if len(refs) != 1 || refs[0].SourceID != "photo:x" {
+		t.Fatalf("refs = %+v; want the file's identity in the ref", refs)
+	}
+	stale := refs[0]
+	m.Attachments[0].SourceID = "photo:y"
+	fresh := mustUpsert(t, s, acc, m)
+	if len(fresh) != 1 || fresh[0].SourceID != "photo:y" {
+		t.Fatalf("refs after the edit = %+v", fresh)
+	}
+	if err := s.PutMedia(acc, stale, strings.NewReader("x bytes")); !errors.Is(err, ErrUnknownAttachment) {
+		t.Errorf("PutMedia with a stale ref = %v, want ErrUnknownAttachment", err)
+	}
+	if err := s.SetAttachmentStatus(acc, stale, model.StatusUnavailable, "gone"); !errors.Is(err, ErrUnknownAttachment) {
+		t.Errorf("SetAttachmentStatus with a stale ref = %v", err)
+	}
+	if err := s.PutMedia(acc, fresh[0], strings.NewReader("y bytes")); err != nil {
+		t.Fatal(err)
+	}
+	// A ref without an identity, as older callers send, still works.
+	plain := fresh[0]
+	plain.SourceID = ""
+	if err := s.SetAttachmentStatus(acc, plain, model.StatusFailed, "x"); err != nil {
+		t.Errorf("a ref without an identity: %v", err)
+	}
+}

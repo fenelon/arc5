@@ -12,6 +12,7 @@ import (
 
 	"github.com/gotd/td/tg"
 
+	"github.com/fenelon/arc5/internal/archive"
 	"github.com/fenelon/arc5/internal/connector"
 	"github.com/fenelon/arc5/internal/model"
 )
@@ -182,6 +183,8 @@ func (r *run) fetch(ctx context.Context, d download) error {
 			return nil
 		case errors.Is(err, connector.ErrStorage), unauthorized(err), ctx.Err() != nil:
 			return err
+		case errors.Is(err, archive.ErrUnknownAttachment):
+			return nil // an edit replaced the file meanwhile; its replacement has its own download
 		case fileGone(err):
 			return r.sink.SetAttachmentStatus(d.ref, model.StatusUnavailable, "Telegram no longer has this file")
 		case referenceExpired(err) && !refreshed:
@@ -219,8 +222,10 @@ func (r *run) put(ctx context.Context, d download) error {
 	putErr := r.sink.PutMedia(d.ref, pr)
 	pr.CloseWithError(errors.New("the archive stopped reading"))
 	downloadErr := <-done
-	if errors.Is(putErr, connector.ErrStorage) {
-		return putErr // the archive failed, not the download: say so, so ingestion pauses
+	if putErr != nil && !errors.Is(putErr, archive.ErrMediaRead) {
+		// The archive refused or failed, not the download: say so, so a full
+		// disk pauses ingestion and a stale ref is dropped.
+		return putErr
 	}
 	if downloadErr != nil {
 		return downloadErr

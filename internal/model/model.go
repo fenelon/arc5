@@ -112,6 +112,11 @@ type AttachmentRef struct {
 	ChatSourceID    string
 	MessageSourceID string
 	Position        int
+	// SourceID is the file's identity, when the source gives one. A ref
+	// whose identity no longer matches the attachment at its position (an
+	// edit replaced the file) is refused, so a late download cannot land on
+	// the replacement.
+	SourceID string
 }
 
 type Message struct {
